@@ -1,4 +1,4 @@
-# k8s/database/persistent-volume.yaml
+# k8s/base/database-pvc.yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
