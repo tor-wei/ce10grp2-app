@@ -1,22 +1,19 @@
-name: Deploy to Kubernetes (Multi-Namespace)
+name: Deploy to Kubernetes
 
 on:
   push:
     branches:
-      - main # Deploys to 'prod' namespace
-      - staging # Deploys to 'uat' namespace
-      - develop # Deploys to 'dev' namespace
+      - main # Deploys to 'prod'
+      - uat # Deploys to 'uat'
+      - dev # Deploys to 'dev'
 
   workflow_dispatch:
     inputs:
       environment:
-        description: "Environment (namespace) to deploy to"
+        description: "Environment to deploy to"
         required: true
         type: choice
-        options:
-          - dev
-          - uat
-          - prod
+        options: [dev, uat, prod]
         default: "dev"
 
 jobs:
@@ -24,53 +21,42 @@ jobs:
     name: Deploy to K8s Namespace
     runs-on: ubuntu-latest
 
-    # Sets the environment name in GitHub's UI for tracking
     environment:
-      name: ${{ (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/staging' && 'uat') || (github.ref == 'refs/heads/develop' && 'dev') || github.event.inputs.environment }}
+      # Set environment based on branch or manual input
+      name: ${{ (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/uat' && 'uat') || (github.ref == 'refs/heads/dev' && 'dev') || github.event.inputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-      # 1. Checkout the repository code
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Set environment-specific variables (Namespace and Manifest Path)
       - name: Set Environment Specifics
         id: set_env
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event.inputs.environment }}" == "prod" ]]; then
-            echo "K8S_NAMESPACE=prod" >> $GITHUB_ENV
-            echo "K8S_MANIFEST_PATH=k8s/prod" >> $GITHUB_ENV
-            echo "Setting environment to PRODUCTION"
-          elif [[ "${{ github.ref }}" == "refs/heads/staging" || "${{ github.event.inputs.environment }}" == "uat" ]]; then
-            echo "K8S_NAMESPACE=uat" >> $GITHUB_ENV
-            echo "K8S_MANIFEST_PATH=k8s/uat" >> $GITHUB_ENV
-            echo "Setting environment to UAT"
-          elif [[ "${{ github.ref }}" == "refs/heads/develop" || "${{ github.event.inputs.environment }}" == "dev" ]]; then
-            echo "K8S_NAMESPACE=dev" >> $GITHUB_ENV
-            echo "K8S_MANIFEST_PATH=k8s/dev" >> $GITHUB_ENV
-            echo "Setting environment to DEV"
-          else
-            echo "::error::Branch or environment not configured for deployment."
-            exit 1
+            echo "K8S_OVERLAY_PATH=k8s/overlays/prod" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=${{ secrets.PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
+          # CORRECTED: Changed 'staging' to 'uat' to match the branch name
+          elif [[ "${{ github.ref }}" == "refs/heads/uat" || "${{ github.event.inputs.environment }}" == "uat" ]]; then
+            echo "K8S_OVERLAY_PATH=k8s/overlays/uat" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=${{ secrets.NON_PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
+          # CORRECTED: Changed 'develop' to 'dev' to match the branch name
+          elif [[ "${{ github.ref }}" == "refs/heads/dev" || "${{ github.event.inputs.environment }}" == "dev" ]]; then
+            echo "K8S_OVERLAY_PATH=k8s/overlays/dev" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=${{ secrets.NON_PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
           fi
 
-      # 3. Configure AWS credentials using your IAM Role
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }} # Your OIDC IAM role ARN
-          role-session-name: ${{ github.run_id }}
-          aws-region: ${{ secrets.AWS_REGION }} # e.g., southeast-asia-1
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      # 4. Setup Kubeconfig for EKS
       - name: Setup Kubeconfig
-        run: |
-          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
-          echo "Kubeconfig setup complete."
+        run: aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
-      # 5. Deploy to the specified namespace in the Kubernetes cluster
-      - name: Deploy to K8s Cluster
-        run: |
-          echo "Applying manifests from ${{ env.K8S_MANIFEST_PATH }} to namespace '${{ env.K8S_NAMESPACE }}'"
-          kubectl apply -f ${{ env.K8S_MANIFEST_PATH }} --namespace ${{ env.K8S_NAMESPACE }}
-          echo "Deployment successful!"
+      - name: Deploy to K8s Cluster with Kustomize
+        run: kubectl apply -k ${{ env.K8S_OVERLAY_PATH }}
