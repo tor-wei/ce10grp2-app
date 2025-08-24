@@ -1,0 +1,21 @@
+# Start minikube
+minikube start
+
+# Load images into minikube
+minikube image load lingo-api:latest
+minikube image load lingo-frontend:latest
+
+# Deploy to Kubernetes
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/database/
+kubectl apply -f k8s/api/
+kubectl apply -f k8s/frontend/
+
+# Check deployment status
+kubectl get pods -n lingo-game
+kubectl get services -n lingo-game
+
+# Port forward to test locally
+kubectl port-forward -n lingo-game service/frontend-service 8080:80
+
+# Visit http://localhost:8080

@@ -1,0 +1,69 @@
+name: Deploy to Kubernetes (Multi-Namespace)
+
+on:
+  push:
+    branches:
+      - main # Deploys to 'prod' namespace
+      - staging # Deploys to 'uat' namespace
+      - develop # Deploys to 'dev' namespace
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment (namespace) to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - uat
+          - prod
+        default: "dev"
+
+jobs:
+  deploy:
+    name: Deploy to K8s Namespace
+    runs-on: ubuntu-latest
+
+    # Sets the environment name in GitHub's UI for tracking
+    environment:
+      name: ${{ (github.ref == 'refs/heads/main' && 'production') || (github.ref == 'refs/heads/staging' && 'uat') || (github.ref == 'refs/heads/develop' && 'development') || github.event.inputs.environment }}
+
+    steps:
+      # 1. Checkout the repository code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Set environment-specific variables (Namespace and Manifest Path)
+      - name: Set Environment Specifics
+        id: set_env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            echo "K8S_NAMESPACE=prod" >> $GITHUB_ENV
+            echo "K8S_MANIFEST_PATH=k8s/prod" >> $GITHUB_ENV
+            echo "Setting environment to PRODUCTION"
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" || "${{ github.event.inputs.environment }}" == "uat" ]]; then
+            echo "K8S_NAMESPACE=uat" >> $GITHUB_ENV
+            echo "K8S_MANIFEST_PATH=k8s/uat" >> $GITHUB_ENV
+            echo "Setting environment to UAT"
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" || "${{ github.event.inputs.environment }}" == "dev" ]]; then
+            echo "K8S_NAMESPACE=dev" >> $GITHUB_ENV
+            echo "K8S_MANIFEST_PATH=k8s/dev" >> $GITHUB_ENV
+            echo "Setting environment to DEV"
+          else
+            echo "::error::Branch or environment not configured for deployment."
+            exit 1
+          fi
+
+      # 3. Set up Kubeconfig for kubectl using the single cluster secret
+      - name: Setup Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          echo "Kubeconfig setup complete."
+
+      # 4. Deploy to the specified namespace in the Kubernetes cluster
+      - name: Deploy to K8s Cluster
+        run: |
+          echo "Applying manifests from ${{ env.K8S_MANIFEST_PATH }} to namespace '${{ env.K8S_NAMESPACE }}'"
+          kubectl apply -f ${{ env.K8S_MANIFEST_PATH }} --namespace ${{ env.K8S_NAMESPACE }}
+          echo "Deployment successful!"
