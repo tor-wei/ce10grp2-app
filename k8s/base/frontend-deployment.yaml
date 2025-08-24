@@ -1,4 +1,4 @@
-# k8s/frontend/deployment.yaml
+# k8s/base/frontend-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: lingo-frontend:latest
-          imagePullPolicy: Never # For local development
+          image: frontend-placeholder # Use a generic placeholder
+          imagePullPolicy: Always # Ensures the new image is always pulled, for local development use Never
           ports:
             - containerPort: 80
           resources:
