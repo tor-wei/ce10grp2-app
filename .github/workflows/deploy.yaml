@@ -26,7 +26,7 @@ jobs:
 
     # Sets the environment name in GitHub's UI for tracking
     environment:
-      name: ${{ (github.ref == 'refs/heads/main' && 'production') || (github.ref == 'refs/heads/staging' && 'uat') || (github.ref == 'refs/heads/develop' && 'development') || github.event.inputs.environment }}
+      name: ${{ (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/staging' && 'uat') || (github.ref == 'refs/heads/develop' && 'dev') || github.event.inputs.environment }}
 
     steps:
       # 1. Checkout the repository code
@@ -54,14 +54,21 @@ jobs:
             exit 1
           fi
 
-      # 3. Set up Kubeconfig for kubectl using the single cluster secret
+      # 3. Configure AWS credentials using your IAM Role
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }} # Your OIDC IAM role ARN
+          role-session-name: ${{ github.run_id }}
+          aws-region: ${{ secrets.AWS_REGION }} # e.g., southeast-asia-1
+
+      # 4. Setup Kubeconfig for EKS
       - name: Setup Kubeconfig
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
           echo "Kubeconfig setup complete."
 
-      # 4. Deploy to the specified namespace in the Kubernetes cluster
+      # 5. Deploy to the specified namespace in the Kubernetes cluster
       - name: Deploy to K8s Cluster
         run: |
           echo "Applying manifests from ${{ env.K8S_MANIFEST_PATH }} to namespace '${{ env.K8S_NAMESPACE }}'"
