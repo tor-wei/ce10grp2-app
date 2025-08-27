@@ -8,5 +8,8 @@
     "lint": "eslint . --ext js && stylelint \"**/*.css\"",
     "test": "echo \"No frontend tests configured\" && exit 0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0"
+  }
 }
