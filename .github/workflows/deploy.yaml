@@ -1,68 +1,63 @@
-name: Deploy to Kubernetes
+name: Build and Deploy to Kubernetes
 
 on:
+  # Trigger the build and auto-deploy to 'dev' when code is pushed to the dev branch
   push:
     branches:
-      - main # Deploys to 'prod'
-      - uat # Deploys to 'uat'
-      - dev # Deploys to 'dev'
+      - dev
 
+  # Allow manual promotion to UAT and Prod
   workflow_dispatch:
     inputs:
+      git_sha:
+        description: "Commit SHA to deploy (use the full SHA)"
+        required: true
       environment:
         description: "Environment to deploy to"
         required: true
         type: choice
-        options: [dev, uat, prod]
-        default: "dev"
+        options: [uat, prod]
 
 jobs:
-  deploy:
-    name: Deploy to K8s Namespace
+  # =================================================================
+  # JOB 1: Build the image only once
+  # =================================================================
+  build:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ (github.ref == 'refs/heads/main' && 'prod') || (github.ref == 'refs/heads/uat' && 'uat') || (github.ref == 'refs/heads/dev' && 'dev') || github.event.inputs.environment }}
+    # This job runs only on pushes to the dev branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     permissions:
       id-token: write
       contents: read
+    outputs:
+      image_tag: ${{ steps.vars.outputs.sha }}
 
     steps:
-      # STEP 1: SETUP
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set Environment Specifics
-        id: set_env
-        run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.event.inputs.environment }}" == "prod" ]]; then
-            echo "K8S_OVERLAY_PATH=k8s/overlays/prod" >> $GITHUB_ENV
-            echo "CLUSTER_NAME=${{ secrets.PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/uat" || "${{ github.event.inputs.environment }}" == "uat" ]]; then
-            echo "K8S_OVERLAY_PATH=k8s/overlays/uat" >> $GITHUB_ENV
-            echo "CLUSTER_NAME=${{ secrets.NON_PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/dev" || "${{ github.event.inputs.environment }}" == "dev" ]]; then
-            echo "K8S_OVERLAY_PATH=k8s/overlays/dev" >> $GITHUB_ENV
-            echo "CLUSTER_NAME=${{ secrets.NON_PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
-          fi
+      - name: Set Image Tag variable
+        id: vars
+        run: echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          role-session-name: ${{ github.run_id }}
+          role-session-name: ${{ github.run_id }}-build
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # STEP 2: BUILD AND PUSH IMAGES
       - name: Build, tag, and push images to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           API_ECR_REPOSITORY: lingo-game-api
           FE_ECR_REPOSITORY: lingo-game-frontend
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ steps.vars.outputs.sha }}
         run: |
           # Build and push API image
           docker build -t $ECR_REGISTRY/$API_ECR_REPOSITORY:$IMAGE_TAG ./api
@@ -72,7 +67,114 @@ jobs:
           docker build -t $ECR_REGISTRY/$FE_ECR_REPOSITORY:$IMAGE_TAG ./frontend
           docker push $ECR_REGISTRY/$FE_ECR_REPOSITORY:$IMAGE_TAG
 
-      # STEP 3: DEPLOY TO EKS
+  # =================================================================
+  # JOB 2: Scan the image for vulnerabilities
+  # =================================================================
+  security-scan:
+    name: Scan Images for Vulnerabilities
+    runs-on: ubuntu-latest
+    needs: build # Runs only after the 'build' job succeeds
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    permissions:
+      id-token: write # To authenticate to AWS ECR
+      contents: read
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: ${{ github.run_id }}-scan
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run Trivy scanner on API image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ needs.build.outputs.ecr_registry }}/lingo-game-api:${{ needs.build.outputs.image_tag }}"
+          format: "table"
+          exit-code: "1" # Fail the build if vulnerabilities are found
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Run Trivy scanner on Frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ needs.build.outputs.ecr_registry }}/lingo-game-frontend:${{ needs.build.outputs.image_tag }}"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+  # =================================================================
+  # JOB 3: Deploy to any environment
+  # =================================================================
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    # Needs the build job ONLY IF it's an automatic dev deploy
+    needs: [build]
+    # This job runs if it's a push to dev OR a manual dispatch
+    if: always() && (needs.build.result == 'success' || github.event_name == 'workflow_dispatch')
+
+    environment:
+      # Set the GH Environment based on the trigger
+      name: ${{ (github.ref == 'refs/heads/dev' && 'dev') || github.event.inputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        # For manual runs, checkout the specific commit that was built
+        with:
+          ref: ${{ github.event.inputs.git_sha || github.sha }}
+
+      - name: Set Environment & Image Tag
+        id: set_env
+        run: |
+          # Determine environment from trigger type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV_NAME="${{ github.event.inputs.environment }}"
+            IMAGE_TAG="${{ github.event.inputs.git_sha }}"
+          else
+            ENV_NAME="dev"
+            IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+          fi
+
+          echo "Deploying to environment: $ENV_NAME"
+          echo "Using image tag: $IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+          if [[ "$ENV_NAME" == "prod" ]]; then
+            echo "K8S_OVERLAY_PATH=k8s/overlays/prod" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=${{ secrets.PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
+          elif [[ "$ENV_NAME" == "uat" ]]; then
+            echo "K8S_OVERLAY_PATH=k8s/overlays/uat" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=${{ secrets.NON_PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
+          else
+            echo "K8S_OVERLAY_PATH=k8s/overlays/dev" >> $GITHUB_ENV
+            echo "CLUSTER_NAME=${{ secrets.NON_PROD_CLUSTER_NAME }}" >> $GITHUB_ENV
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: ${{ github.run_id }}-deploy
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Setup Kubeconfig
         run: aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
 
@@ -81,12 +183,11 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           API_ECR_REPOSITORY: lingo-game-api
           FE_ECR_REPOSITORY: lingo-game-frontend
-          IMAGE_TAG: ${{ github.sha }}
         run: |
-          echo "Updating Kustomize image tags..."
+          echo "Updating Kustomize image tags for tag: ${{ env.IMAGE_TAG }}"
           cd ${{ env.K8S_OVERLAY_PATH }}
-          kustomize edit set image api-placeholder=$ECR_REGISTRY/$API_ECR_REPOSITORY:$IMAGE_TAG
-          kustomize edit set image frontend-placeholder=$ECR_REGISTRY/$FE_ECR_REPOSITORY:$IMAGE_TAG
+          kustomize edit set image api-placeholder=$ECR_REGISTRY/$API_ECR_REPOSITORY:${{ env.IMAGE_TAG }}
+          kustomize edit set image frontend-placeholder=$ECR_REGISTRY/$FE_ECR_REPOSITORY:${{ env.IMAGE_TAG }}
           cd -
 
           echo "Applying Kustomize configuration to the cluster..."
