@@ -6,6 +6,15 @@ __pycache__/
 # C extensions
 *.so
 
+# Dependencies
+node_modules/
+api/node_modules/
+frontend/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
 # Distribution / packaging
 .Python
 build/
