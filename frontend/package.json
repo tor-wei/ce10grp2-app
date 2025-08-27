@@ -1,0 +1,12 @@
+{
+  "name": "lingo-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lingo Game Frontend",
+  "private": true,
+  "scripts": {
+    "lint": "eslint . --ext js && stylelint \"**/*.css\"",
+    "test": "echo \"No frontend tests configured\" && exit 0"
+  },
+  "devDependencies": {}
+}
