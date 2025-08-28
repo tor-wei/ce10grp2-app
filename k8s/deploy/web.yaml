@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: app-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      serviceAccountName: web-sa
+      containers:
+      - name: web
+        # TODO: replace with your ECR image for the Lingo game:
+        # 255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/lingo-game:latest
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
