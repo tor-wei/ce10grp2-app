@@ -20,3 +20,6 @@ __pycache__/
 *.tfstate
 *.tfstate.*
 .terraform/
+# Python virtual environment
+.venv/
+
