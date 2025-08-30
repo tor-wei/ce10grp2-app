@@ -32,6 +32,7 @@ jobs:
       contents: read
     outputs:
       image_tag: ${{ steps.vars.outputs.sha }}
+      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
       - name: Checkout Repository
@@ -133,9 +134,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        # For manual runs, checkout the specific commit that was built
         with:
-          ref: ${{ github.event.inputs.git_sha || github.sha }}
+          ref: ${{ github.event.inputs.git_sha }} # Use the exact SHA provided by the user
 
       - name: Set Environment & Image Tag
         id: set_env
