@@ -32,7 +32,6 @@ jobs:
       contents: read
     outputs:
       image_tag: ${{ steps.vars.outputs.sha }}
-      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
       - name: Checkout Repository
@@ -56,8 +55,8 @@ jobs:
       - name: Build, tag, and push images to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          API_ECR_REPOSITORY: lingo-game-api
-          FE_ECR_REPOSITORY: lingo-game-frontend
+          API_ECR_REPOSITORY: ${{ vars.API_ECR_REPOSITORY }}
+          FE_ECR_REPOSITORY: ${{ vars.FE_ECR_REPOSITORY }}
           IMAGE_TAG: ${{ steps.vars.outputs.sha }}
         run: |
           # Build and push API image
@@ -95,7 +94,7 @@ jobs:
       - name: Run Trivy scanner on API image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ needs.build.outputs.ecr_registry }}/lingo-game-api:${{ needs.build.outputs.image_tag }}"
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ vars.API_ECR_REPOSITORY }}:${{ needs.build.outputs.image_tag }}"
           format: "table"
           exit-code: "1" # Fail the build if vulnerabilities are found
           ignore-unfixed: true
@@ -105,7 +104,7 @@ jobs:
       - name: Run Trivy scanner on Frontend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ needs.build.outputs.ecr_registry }}/lingo-game-frontend:${{ needs.build.outputs.image_tag }}"
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ vars.FE_ECR_REPOSITORY }}:${{ needs.build.outputs.image_tag }}"
           format: "table"
           exit-code: "1"
           ignore-unfixed: true
@@ -181,8 +180,8 @@ jobs:
       - name: Update Kustomize and Deploy
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          API_ECR_REPOSITORY: lingo-game-api
-          FE_ECR_REPOSITORY: lingo-game-frontend
+          API_ECR_REPOSITORY: ${{ vars.API_ECR_REPOSITORY }}
+          FE_ECR_REPOSITORY: ${{ vars.FE_ECR_REPOSITORY }}
         run: |
           echo "Updating Kustomize image tags for tag: ${{ env.IMAGE_TAG }}"
           cd ${{ env.K8S_OVERLAY_PATH }}
