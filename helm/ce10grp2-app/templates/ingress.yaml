@@ -1,0 +1,39 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ce10grp2-app.fullname" . }}
+  labels:
+    {{- include "ce10grp2-app.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                {{- /*
+                  This logic checks if the service is 'api' or 'frontend'
+                  and then builds the full service name and gets the correct port.
+                */}}
+                {{- if eq .service "api" }}
+                name: {{ include "ce10grp2-app.fullname" $ }}-api
+                port:
+                  number: {{ $.Values.api.service.port }}
+                {{- else if eq .service "frontend" }}
+                name: {{ include "ce10grp2-app.fullname" $ }}-frontend
+                port:
+                  number: {{ $.Values.frontend.service.port }}
+                {{- end }}
+          {{- end }}
+    {{- end }}
+{{- end }}

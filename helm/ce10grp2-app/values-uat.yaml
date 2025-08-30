@@ -1,0 +1,27 @@
+api:
+  replicaCount: 2
+  image:
+    tag: uat
+  env:
+    NODE_ENV: staging
+    REDIS_URL: "redis://redis:6379"
+
+frontend:
+  replicaCount: 2
+  image:
+    tag: uat
+  env:
+    REACT_APP_API_URL: "https://uat-api.ce10grp2.com"
+
+ingress:
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: $UAT_CERT_ARN
+  hosts:
+    - host: uat.ce10grp2.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: frontend

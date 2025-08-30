@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ce10grp2-uat
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/tor-wei/ce10grp2-app
+    path: helm/ce10grp2-app
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-uat.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ce10grp2-uat
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true

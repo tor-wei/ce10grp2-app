@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "ce10grp2-app.fullname" . }}-test-api-connection"
+  labels:
+    {{- include "ce10grp2-app.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget-api-test
+      image: busybox
+      command: ['wget']
+      args:
+        # Use --spider to check if the service is reachable without downloading the content
+        - '--spider'
+        # Set a reasonable timeout to prevent the test from hanging
+        - '--timeout=10'
+        # The internal URL of the API service
+        - 'http://{{ include "ce10grp2-app.fullname" . }}-api:{{ .Values.api.service.port }}/'
+  restartPolicy: Never
