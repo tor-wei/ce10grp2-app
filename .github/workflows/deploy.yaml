@@ -147,7 +147,7 @@ jobs:
   # JOB 3: Promote to any environment
   # =================================================================
   promote:
-    name: Promote to ${{ github.event.inputs.environment || 'dev' }}
+    name: Promote to ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     environment:
