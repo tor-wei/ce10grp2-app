@@ -152,16 +152,14 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.environment == 'uat' &&
       github.event.inputs.git_sha != ''
-    environment:
-      name: uat
     permissions:
       id-token: write
       contents: write
     steps:
-      - name: Checkout main branch
+      - name: Checkout uat branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: uat
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -202,7 +200,7 @@ jobs:
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-uat.yaml
           git commit -m "Promote ${{ github.event.inputs.git_sha }} to UAT"
-          git push origin main
+          git push origin uat
 
   # =================================================================
   # JOB 3B: Promote the current UAT version to PROD
@@ -212,17 +210,15 @@ jobs:
     runs-on: ubuntu-latest
     # This job only runs when 'prod' is selected
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
-    environment:
-      name: prod
     permissions:
       id-token: write
       contents: write
 
     steps:
-      - name: Checkout main branch
+      - name: Checkout uat branch to get version
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: uat
 
       - name: Get current UAT image tag
         id: uat_version
