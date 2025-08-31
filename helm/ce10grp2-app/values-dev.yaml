@@ -1,0 +1,26 @@
+api:
+  replicaCount: 1
+  image:
+    tag: dev
+  env:
+    NODE_ENV: development
+    DEBUG: "true"
+    REDIS_URL: "redis://redis:6379"
+
+frontend:
+  replicaCount: 1
+  image:
+    tag: dev
+  env:
+    REACT_APP_API_URL: "https://dev-api.ce10grp2.com"
+
+ingress:
+  hosts:
+    - host: dev.ce10grp2.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: frontend

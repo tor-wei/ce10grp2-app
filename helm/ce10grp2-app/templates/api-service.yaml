@@ -1,0 +1,22 @@
+{{- if .Values.api.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ce10grp2-app.fullname" . }}-api
+  labels:
+    {{- include "ce10grp2-app.labels" . | nindent 4 }}
+    # Add a component label to distinguish this from the frontend service
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+      targetPort: {{ .Values.api.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    # This selector finds the pods managed by the API deployment
+    app.kubernetes.io/name: {{ include "ce10grp2-app.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: api
+{{- end -}}
