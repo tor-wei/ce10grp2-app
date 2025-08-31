@@ -200,7 +200,16 @@ jobs:
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-uat.yaml
           git commit -m "Promote ${{ github.event.inputs.git_sha }} to UAT"
-          git push origin uat
+
+      - name: Create Pull Request to UAT
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Promote ${{ github.event.inputs.git_sha }} to UAT"
+          title: "Promote ${{ github.event.inputs.git_sha }} to UAT"
+          body: "Please review and merge to deploy version `${{ github.event.inputs.git_sha }}` to the UAT environment."
+          branch: "promote-uat-${{ github.event.inputs.git_sha }}" # Creates a temporary branch for the PR
+          base: "uat" # The target branch for the PR
 
   # =================================================================
   # JOB 3B: Promote the current UAT version to PROD
@@ -261,4 +270,13 @@ jobs:
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-prod.yaml
           git commit -m "Promote UAT version $UAT_TAG to Production"
-          git push origin main
+
+      - name: Create Pull Request to Production
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Promote UAT version ${{ steps.uat_version.outputs.tag }} to Production"
+          title: "Promote UAT version ${{ steps.uat_version.outputs.tag }} to Production"
+          body: "Please review and merge to deploy version `${{ steps.uat_version.outputs.tag }}` to the Production environment."
+          branch: "promote-prod-${{ steps.uat_version.outputs.tag }}"
+          base: "main"
