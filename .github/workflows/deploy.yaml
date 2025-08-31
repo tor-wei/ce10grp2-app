@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
     inputs:
       git_sha:
-        description: "Commit SHA to deploy (use the full SHA)"
-        required: true
+        description: "Commit SHA (Required only for UAT promotion)"
+        required: false # MODIFIED
       environment:
         description: "Environment to deploy to"
         required: true
@@ -20,7 +20,6 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
 jobs:
   # =================================================================
@@ -58,6 +57,7 @@ jobs:
 
       - name: Build and Push API Image
         env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ce10grp2-app/api
           IMAGE_TAG: ${{ steps.vars.outputs.sha }}
         run: |
@@ -68,9 +68,9 @@ jobs:
           # Also tag as 'dev' for dev environment
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
-
       - name: Build and Push Frontend Image
         env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ce10grp2-app/frontend
           IMAGE_TAG: ${{ steps.vars.outputs.sha }}
         run: |
@@ -116,11 +116,10 @@ jobs:
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
       - name: Run Trivy scan on API image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.ECR_REGISTRY }}/ce10grp2-app/api:${{ needs.build.outputs.image_tag }}"
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/ce10grp2-app/api:${{ needs.build.outputs.image_tag }}"
           format: "sarif"
           output: "trivy-api-results.sarif"
           severity: "CRITICAL,HIGH"
@@ -133,7 +132,7 @@ jobs:
       - name: Run Trivy scan on Frontend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.ECR_REGISTRY }}/ce10grp2-app/frontend:${{ needs.build.outputs.image_tag }}"
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/ce10grp2-app/frontend:${{ needs.build.outputs.image_tag }}"
           format: "sarif"
           output: "trivy-frontend-results.sarif"
           severity: "CRITICAL,HIGH"
@@ -144,67 +143,126 @@ jobs:
           sarif_file: "trivy-frontend-results.sarif"
 
   # =================================================================
-  # JOB 3: Promote to any environment
+  # JOB 3A: Promote a specific commit from DEV to UAT
   # =================================================================
-  promote:
-    name: Promote to ${{ github.event.inputs.environment }}
+  promote_to_uat:
+    name: Promote to UAT
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.environment == 'uat' &&
+      github.event.inputs.git_sha != ''
     environment:
-      name: ${{ github.event.inputs.environment }}
+      name: uat
     permissions:
       id-token: write
       contents: write
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: main # Always update main branch for promotions
+          ref: main
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          role-session-name: github-actions-promote
+          role-session-name: github-actions-promote-uat
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify Image Exists
+      - name: Verify Image Exists in ECR
         run: |
           aws ecr describe-images \
             --repository-name ce10grp2-app/api \
             --image-ids imageTag=${{ github.event.inputs.git_sha }} \
             --region ${{ env.AWS_REGION }}
 
-      - name: Tag Images for Environment
+      - name: Re-tag Image for UAT
         env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.inputs.git_sha }}
-          TARGET_ENV: ${{ github.event.inputs.environment }}
         run: |
-          # Pull and retag API image
+          # Retag API image
           docker pull $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:$TARGET_ENV
-          docker push $ECR_REGISTRY/ce10grp2-app/api:$TARGET_ENV
-
-          # Pull and retag Frontend image
+          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:uat
+          docker push $ECR_REGISTRY/ce10grp2-app/api:uat
+          # Retag Frontend image
           docker pull $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:$TARGET_ENV
-          docker push $ECR_REGISTRY/ce10grp2-app/frontend:$TARGET_ENV
+          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:uat
+          docker push $ECR_REGISTRY/ce10grp2-app/frontend:uat
 
-      - name: Update Helm Values
+      - name: Update Helm Values for UAT
         run: |
-          ENV_NAME="${{ github.event.inputs.environment }}"
-          VALUES_FILE="helm/ce10grp2-app/values-${ENV_NAME}.yaml"
-
-          # Update image tags
-          sed -i "s|tag: .*|tag: ${{ github.event.inputs.git_sha }}|g" $VALUES_FILE
-
+          sed -i "s|tag: .*|tag: ${{ github.event.inputs.git_sha }}|g" helm/ce10grp2-app/values-uat.yaml
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add $VALUES_FILE
-          git commit -m "Promote ${{ github.event.inputs.git_sha }} to ${ENV_NAME}"
+          git add helm/ce10grp2-app/values-uat.yaml
+          git commit -m "Promote ${{ github.event.inputs.git_sha }} to UAT"
+          git push origin main
+
+  # =================================================================
+  # JOB 3B: Promote the current UAT version to PROD
+  # =================================================================
+  promote_from_uat_to_prod:
+    name: Promote UAT to Production
+    runs-on: ubuntu-latest
+    # This job only runs when 'prod' is selected
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
+    environment:
+      name: prod
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Get current UAT image tag
+        id: uat_version
+        run: |
+          # Extracts the tag from values-uat.yaml to ensure we promote what's been tested
+          UAT_TAG=$(grep 'tag:' helm/ce10grp2-app/values-uat.yaml | awk '{print $2}')
+          echo "tag=$UAT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-promote-prod
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Re-tag Image for Production
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.uat_version.outputs.tag }}
+        run: |
+          # Retag API image
+          docker pull $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:prod
+          docker push $ECR_REGISTRY/ce10grp2-app/api:prod
+          # Retag Frontend image
+          docker pull $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:prod
+          docker push $ECR_REGISTRY/ce10grp2-app/frontend:prod
+
+      - name: Update Helm Values for Production
+        run: |
+          # Use the tag we extracted from the UAT values file
+          UAT_TAG="${{ steps.uat_version.outputs.tag }}"
+          sed -i "s|tag: .*|tag: $UAT_TAG|g" helm/ce10grp2-app/values-prod.yaml
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add helm/ce10grp2-app/values-prod.yaml
+          git commit -m "Promote UAT version $UAT_TAG to Production"
           git push origin main

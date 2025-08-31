@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/tor-wei/ce10grp2-app
     path: helm/ce10grp2-app
-    targetRevision: main
+    targetRevision: uat
     helm:
       valueFiles:
         - values.yaml
