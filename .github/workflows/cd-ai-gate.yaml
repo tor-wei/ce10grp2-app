@@ -1,0 +1,81 @@
+name: CD - Deploy to EKS with AI Quality Gate
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  EKS_CLUSTER_NAME: ce10grp2-dev-uat-eks-cluster
+  APP_NAMESPACE: app-dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_APP_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Install kubectl (safe on GH runners)
+      - name: Install kubectl
+        run: |
+          curl -sSL "https://dl.k8s.io/release/$(curl -sSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" -o kubectl
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/kubectl
+          kubectl version --client --short
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "${{ env.EKS_CLUSTER_NAME }}" --region "${{ env.AWS_REGION }}"
+
+      - name: Verify cluster access
+        run: |
+          kubectl get nodes
+
+      # ---------- Deploy using Kustomize overlay (uat) ----------
+      - name: Apply Kustomize overlay (uat)
+        run: |
+          # ensure namespace exists (if overlay doesn't create it)
+          kubectl apply -f k8s/rbac/namespace.yaml || true
+          kubectl apply -k k8s/overlays/uat
+
+      - name: Wait for all Deployments to roll out
+        run: |
+          set -e
+          for d in $(kubectl -n "${{ env.APP_NAMESPACE }}" get deploy -o name); do
+            echo "Waiting for rollout: $d"
+            kubectl -n "${{ env.APP_NAMESPACE }}" rollout status "$d" --timeout=240s
+          done
+
+      # ---------- AI gate with k8sgpt ----------
+      - name: Run k8sgpt analysis
+        run: |
+          docker run --rm -v "$HOME/.kube":/root/.kube ghcr.io/k8sgpt-ai/k8sgpt:latest \
+            analyze --explain=false --format json > k8sgpt-report.json
+          sudo apt-get update && sudo apt-get install -y jq
+          jq . k8sgpt-report.json | head -200 || true
+
+      - name: Upload k8sgpt report
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8sgpt-report
+          path: k8sgpt-report.json
+
+      - name: AI Quality Gate - Fail on critical issues
+        run: |
+          critical_count=$(jq '[.issues[] | select((.severity // "") | ascii_downcase == "critical")] | length' k8sgpt-report.json)
+          echo "Critical issues: $critical_count"
+          if [ "$critical_count" -gt 0 ]; then
+            echo "::error::Critical issues detected by k8sgpt. Failing pipeline."
+            exit 1
+          fi
