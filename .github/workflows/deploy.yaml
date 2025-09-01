@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - dev
+    paths:
+      - "api/**" # Trigger on changes in the api directory
+      - "frontend/**" # Trigger on changes in the frontend directory
+      - ".github/workflows/**" # Or on changes to the workflow itself
 
   # Allow manual promotion to UAT and Prod
   workflow_dispatch:
@@ -83,14 +87,27 @@ jobs:
 
       - name: Update Helm Chart for Dev
         run: |
-          # Update the image tags in values-dev.yaml
-          sed -i "s|tag: .*|tag: ${{ steps.vars.outputs.sha }}|g" helm/ce10grp2-app/values-dev.yaml
+          # Install yq
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
+          # Update both api and frontend tags using the current commit SHA
+          yq -i '.api.image.tag = "${{ steps.vars.outputs.sha }}"' helm/ce10grp2-app/values-dev.yaml
+          yq -i '.frontend.image.tag = "${{ steps.vars.outputs.sha }}"' helm/ce10grp2-app/values-dev.yaml
 
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-dev.yaml
           git commit -m "Update dev image tags to ${{ steps.vars.outputs.sha }}"
-          git push origin dev
+
+      - name: Create Pull Request to Dev
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Promote ${{ steps.vars.outputs.sha }} to DEV"
+          title: "Promote ${{ steps.vars.outputs.sha }} to DEV"
+          body: "Please review and merge to deploy version `${{ steps.vars.outputs.sha }}` to the DEV environment."
+          branch: "promote-dev-${{ steps.vars.outputs.sha }}" # Creates a temporary branch for the PR
+          base: "dev" # The target branch for the PR
 
   # =================================================================
   # JOB 2: Scan the image for vulnerabilities
@@ -195,7 +212,12 @@ jobs:
 
       - name: Update Helm Values for UAT
         run: |
-          sed -i "s|tag: .*|tag: ${{ github.event.inputs.git_sha }}|g" helm/ce10grp2-app/values-uat.yaml
+          # Install yq
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+          # Update both api and frontend tags using the manually provided git_sha
+          yq -i '.api.image.tag = "${{ github.event.inputs.git_sha }}"' helm/ce10grp2-app/values-uat.yaml
+          yq -i '.frontend.image.tag = "${{ github.event.inputs.git_sha }}"' helm/ce10grp2-app/values-uat.yaml
+
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-uat.yaml
@@ -232,9 +254,18 @@ jobs:
       - name: Get current UAT image tag
         id: uat_version
         run: |
-          # Extracts the tag from values-uat.yaml to ensure we promote what's been tested
-          UAT_TAG=$(grep 'tag:' helm/ce10grp2-app/values-uat.yaml | awk '{print $2}')
+          # Install yq
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
+          # Safely read the api image tag from the uat values file
+          UAT_TAG=$(yq '.api.image.tag' helm/ce10grp2-app/values-uat.yaml)
           echo "tag=$UAT_TAG" >> $GITHUB_OUTPUT
+
+      # ADD THIS STEP to switch to the main branch context
+      - name: Checkout main branch for update
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -263,9 +294,16 @@ jobs:
 
       - name: Update Helm Values for Production
         run: |
+          # Install yq
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
           # Use the tag we extracted from the UAT values file
           UAT_TAG="${{ steps.uat_version.outputs.tag }}"
-          sed -i "s|tag: .*|tag: $UAT_TAG|g" helm/ce10grp2-app/values-prod.yaml
+
+          # Update both api and frontend tags using the tag from the UAT values file
+          yq -i ".api.image.tag = \"$UAT_TAG\"" helm/ce10grp2-app/values-prod.yaml
+          yq -i ".frontend.image.tag = \"$UAT_TAG\"" helm/ce10grp2-app/values-prod.yaml
+
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-prod.yaml
