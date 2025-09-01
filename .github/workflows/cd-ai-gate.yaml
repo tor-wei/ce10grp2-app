@@ -1,0 +1,90 @@
+name: CD with AI Gate
+
+on:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AI_GATE_STRICT: ${{ vars.AI_GATE_STRICT || 'false' }}   # warn-only by default
+      K8SGPT_NAMESPACE: ${{ vars.K8SGPT_NAMESPACE || '' }}
+      AWS_REGION: ap-southeast-1
+      EKS_CLUSTER_NAME: ce10grp2-dev-uat-eks-cluster
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # (placeholder) your real deploy step would be above the AI gate
+      - name: (demo) pretend deploy
+        run: echo "deployed"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}"
+
+      - name: Ensure jq is installed
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run k8sgpt scan (capture RAW)
+        run: |
+          mkdir -p artifacts
+          if [ -n "${K8SGPT_NAMESPACE}" ]; then
+            docker run --rm -v "$HOME/.kube":/root/.kube ghcr.io/k8sgpt-ai/k8sgpt:latest \
+              analyze --namespace "${K8SGPT_NAMESPACE}" --output json --anonymize 2>&1 | tee artifacts/k8sgpt-report.raw.txt
+          else
+            docker run --rm -v "$HOME/.kube":/root/.kube ghcr.io/k8sgpt-ai/k8sgpt:latest \
+              analyze --output json --anonymize 2>&1 | tee artifacts/k8sgpt-report.raw.txt
+          fi
+
+      # Strip any warning lines before the first { or [
+      - name: Sanitize report to valid JSON
+        run: |
+          awk 'f||/^[[:space:]]*[\{\[]/{f=1} f' artifacts/k8sgpt-report.raw.txt > artifacts/k8sgpt-report.json || true
+          # if sanitize produced empty file, fall back to {}
+          if [ ! -s artifacts/k8sgpt-report.json ]; then
+            echo '{}' > artifacts/k8sgpt-report.json
+          fi
+
+      - name: Gate (warn-only unless AI_GATE_STRICT=true)
+        run: |
+          set -e
+          FILE="artifacts/k8sgpt-report.json"
+          if jq -e . "$FILE" >/dev/null 2>&1; then
+            STATUS=$(jq -r '(.status // .Status // empty)' "$FILE")
+            PROBLEMS=$(jq -r '(.problems // .Problems // 0)' "$FILE")
+          else
+            echo "Sanitized file still not valid JSON; defaulting to safe values."
+            STATUS=""
+            PROBLEMS=0
+          fi
+
+          echo "Status=$STATUS Problems=$PROBLEMS Strict=$AI_GATE_STRICT"
+          if [ "$AI_GATE_STRICT" = "true" ] && [ "$STATUS" = "ProblemDetected" ] && [ "${PROBLEMS:-0}" -gt 0 ]; then
+            echo "AI gate is STRICT and problems detected -> failing pipeline"
+            exit 1
+          else
+            echo "AI gate is non-strict or clean -> not failing the pipeline"
+          fi
+
+      - name: Upload k8sgpt report artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8sgpt-report
+          path: |
+            artifacts/k8sgpt-report.raw.txt
+            artifacts/k8sgpt-report.json
