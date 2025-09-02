@@ -144,9 +144,10 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: "trivy-api-results.sarif"
+          category: backend
 
       - name: Run Trivy scan on Frontend image
         uses: aquasecurity/trivy-action@master
@@ -157,9 +158,10 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: "trivy-frontend-results.sarif"
+          category: frontend
 
   # =================================================================
   # JOB 3A: Promote a specific commit from DEV to UAT
