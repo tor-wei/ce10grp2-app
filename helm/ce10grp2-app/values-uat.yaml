@@ -22,6 +22,6 @@ ingress:
         - path: /api
           pathType: Prefix
           service: api
-        - path: /
+        - path: /frontend
           pathType: Prefix
           service: frontend
