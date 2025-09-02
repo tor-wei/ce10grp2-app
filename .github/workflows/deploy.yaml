@@ -36,8 +36,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     permissions:
       id-token: write
-      contents: read
-      pull-requests: write
+      contents: write
     outputs:
       image_tag: ${{ steps.vars.outputs.sha }}
 
@@ -173,7 +172,6 @@ jobs:
     permissions:
       id-token: write
       contents: write
-      pull-requests: write
     steps:
       - name: Checkout uat branch
         uses: actions/checkout@v4
@@ -246,7 +244,6 @@ jobs:
     permissions:
       id-token: write
       contents: write
-      pull-requests: write
 
     steps:
       - name: Checkout uat branch to get version
