@@ -1,0 +1,98 @@
+name: AI Gate (k8sgpt)
+
+on:
+  workflow_run:
+    workflows: ["Deploy app-dev (EKS Fargate)"]
+    types: [completed]
+  workflow_dispatch: {}   # lets a maintainer run it manually
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  k8sgpt_gate:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: dev-uat
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Build short-lived kubeconfig
+        run: |
+          set -e
+          CLUSTER_NAME="${{ vars.EKS_CLUSTER }}"
+          REGION="${{ vars.AWS_REGION }}"
+          if [ -z "$CLUSTER_NAME" ] || [ "$CLUSTER_NAME" = "null" ]; then
+            CLUSTER_NAME=$(aws eks list-clusters --region "$REGION" \
+              --query "clusters[?contains(@,'dev') || contains(@,'uat')][0]" --output text)
+          fi
+          echo "Using cluster: $CLUSTER_NAME in $REGION"
+          SERVER=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --query "cluster.endpoint" --output text)
+          CA_B64=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --query "cluster.certificateAuthority.data" --output text)
+          echo "$CA_B64" | base64 -d > /tmp/eks-ca.crt
+          TOKEN=$(aws eks get-token --cluster-name "$CLUSTER_NAME" --region "$REGION" --output json | jq -r '.status.token')
+          cat > /tmp/kube-k8sgpt.yaml <<EOF
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              server: ${SERVER}
+              certificate-authority: /work/eks-ca.crt
+            name: eks
+          contexts:
+          - context:
+              cluster: eks
+              user: k8sgpt
+            name: k8sgpt@eks
+          current-context: k8sgpt@eks
+          users:
+          - name: k8sgpt
+            user:
+              token: "${TOKEN}"
+          EOF
+
+      - name: Run k8sgpt analysis (no LLM)
+        run: |
+          mkdir -p tools/ai-guard
+          docker run --rm \
+            -e KUBECONFIG=/work/kube-k8sgpt.yaml \
+            -v /tmp/kube-k8sgpt.yaml:/work/kube-k8sgpt.yaml:ro \
+            -v /tmp/eks-ca.crt:/work/eks-ca.crt:ro \
+            -v $GITHUB_WORKSPACE:/work -w /work \
+            ghcr.io/k8sgpt-ai/k8sgpt:latest \
+            analyze --explain=false --output json --no-cache \
+            --filter Pod,Service,Deployment,Ingress > tools/ai-guard/k8sgpt.json
+
+      - name: Gate on findings
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          d=json.load(open("tools/ai-guard/k8sgpt.json"))
+          res=d.get("results") or []
+          problems=d.get("problems",0) or len(res)
+          print(f"[ai-gate] problems={problems}")
+          for r in res[:20]:
+            msg=(r.get("error") or [{}])[0].get("Text") or r.get("details") or ""
+            print(f" - {r.get('kind')} {r.get('name')}: {msg[:200]}")
+          sys.exit(1 if problems>0 else 0)
+          PY
+
+      - name: Upload AI report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-guard-k8sgpt
+          path: tools/ai-guard/k8sgpt.json
