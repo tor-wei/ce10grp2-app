@@ -3,8 +3,6 @@ global:
   aws:
     accountId: "255945442255" # <-- VARIABLE
     region: "ap-southeast-1" # <-- VARIABLE
-  imagePullSecrets:
-    - name: ecr-credentials
 
 # API Service Configuration
 api:
