@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis # Keep the name simple for service discovery (e.g., redis://redis:6379)
+  name: redis-service # Keep the name simple for service discovery (e.g., redis://redis:6379)
   labels:
     app: redis
 spec:
