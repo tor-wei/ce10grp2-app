@@ -55,15 +55,14 @@ frontend:
 # Ingress Configuration
 ingress:
   enabled: true
-  className: alb
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
+  className: nginx
+  annotations: {}
   hosts:
-    - paths:
+    - host: ""
+      paths:
         - path: /api
           pathType: Prefix
           service: api
-        - path: /frontend
+        - path: /
           pathType: Prefix
           service: frontend

@@ -3,13 +3,13 @@ name: Deploy app-dev (EKS Fargate)
 on:
   push:
     branches: [dev]
-    paths: ['k8s/**', '.github/workflows/deploy-app-dev.yml']
+    paths: ["k8s/**", ".github/workflows/deploy-app-dev.yml"]
   workflow_dispatch:
     inputs:
       image:
-        description: 'Container image to deploy (optional)'
+        description: "Container image to deploy (optional)"
         required: false
-        default: 'nginx:alpine'
+        default: "nginx:alpine"
 
 permissions:
   id-token: write
