@@ -11,7 +11,7 @@ api:
       memory: 512Mi
   env:
     NODE_ENV: production
-    REDIS_URL: "redis://redis:6379"
+    REDIS_URL: { { .Values.api.env.REDIS_URL | quote } }
 
 frontend:
   replicaCount: 3
@@ -25,7 +25,7 @@ frontend:
       cpu: 250m
       memory: 256Mi
   env:
-    REACT_APP_API_URL: "https://api.ce10grp2.com"
+    REACT_APP_API_URL: "https://api.ce10grp2.com/api"
 
 ingress:
   annotations:
