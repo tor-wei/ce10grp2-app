@@ -40,13 +40,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3000
+            port: http
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /ready
-            port: 3000
+            path: /health
+            port: http
           initialDelaySeconds: 5
           periodSeconds: 5
 {{- end }}
