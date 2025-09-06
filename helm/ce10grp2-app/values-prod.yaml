@@ -11,7 +11,8 @@ api:
       memory: 512Mi
   env:
     NODE_ENV: production
-    REDIS_URL: { { .Values.api.env.REDIS_URL | quote } }
+    REDIS_HOST: "redis-service"
+    REDIS_PORT: "6379"
 
 frontend:
   replicaCount: 3
