@@ -6,7 +6,8 @@ api:
   env:
     NODE_ENV: development
     DEBUG: "true"
-    REDIS_HOST: "redis"
+    REDIS_HOST: "redis-service"
+    REDIS_PORT: "6379"
 frontend:
   replicaCount: 1
   image:

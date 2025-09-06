@@ -4,7 +4,8 @@ api:
     tag: uat
   env:
     NODE_ENV: staging
-    REDIS_HOST: "redis"
+    REDIS_HOST: "redis-service"
+    REDIS_PORT: "6379"
 
 frontend:
   replicaCount: 2
