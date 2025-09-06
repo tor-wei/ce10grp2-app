@@ -1,0 +1,16 @@
+{{- if .Values.redis.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis # Keep the name simple for service discovery (e.g., redis://redis:6379)
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.redis.service.port }}
+      targetPort: {{ .Values.redis.service.port }}
+      protocol: TCP
+  selector:
+    app: redis
+{{- end }}
