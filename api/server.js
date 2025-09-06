@@ -11,8 +11,7 @@ app.use(express.static("client"));
 
 // Redis connection
 const redisClient = redis.createClient({
-  host: process.env.REDIS_HOST || "redis-service",
-  port: process.env.REDIS_PORT || 6379,
+  url: process.env.REDIS_URL || "redis://redis-service:6379",
 });
 
 // Middleware

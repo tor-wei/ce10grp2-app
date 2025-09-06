@@ -29,8 +29,7 @@ api:
 
   env:
     NODE_ENV: production
-    REDIS_HOST: "redis-service"
-    REDIS_PORT: "6379"
+    REDIS_URL: "redis://redis:6379"
     PORT: "3000"
 
 # Frontend Service Configuration
