@@ -11,7 +11,7 @@ app.use(express.static("client"));
 
 // Redis connection
 const redisClient = redis.createClient({
-  url: process.env.REDIS_URL,
+  url: process.env.REDIS_URL || "redis://redis-service:6379",
 });
 
 // Middleware
