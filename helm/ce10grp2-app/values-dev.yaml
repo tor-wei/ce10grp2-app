@@ -6,7 +6,7 @@ api:
   env:
     NODE_ENV: development
     DEBUG: "true"
-    REDIS_URL: "redis://redis:6379"
+    REDIS_URL: "redis://redis-service:6379"
 frontend:
   replicaCount: 1
   image:
