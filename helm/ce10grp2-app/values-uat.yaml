@@ -4,7 +4,7 @@ api:
     tag: uat
   env:
     NODE_ENV: staging
-    REDIS_HOST: "redis"
+    REDIS_URL: "redis://redis:6379"
 
 frontend:
   replicaCount: 2
