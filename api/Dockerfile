@@ -16,7 +16,7 @@ COPY . .
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nodejs -u 1001
-# USER nodejs
+USER nodejs
 
 EXPOSE 3000
 
