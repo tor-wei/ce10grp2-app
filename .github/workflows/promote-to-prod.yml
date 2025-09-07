@@ -1,0 +1,81 @@
+# .github/workflows/promote-to-prod.yml
+name: Promote UAT to Production
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+jobs:
+  promote:
+    name: Promote UAT to Production
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout uat branch to get version
+        uses: actions/checkout@v4
+        with:
+          ref: uat
+
+      - name: Get current UAT image tag
+        id: uat_version
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+          UAT_TAG=$(yq '.api.image.tag' helm/ce10grp2-app/values-uat.yaml)
+          echo "tag=$UAT_TAG" >> $GITHUB_OUTPUT
+
+      - name: Checkout main branch for update
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-promote-prod
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Re-tag Images for Production
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.uat_version.outputs.tag }}
+        run: |
+          docker pull $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:prod
+          docker push $ECR_REGISTRY/ce10grp2-app/api:prod
+
+          docker pull $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:prod
+          docker push $ECR_REGISTRY/ce10grp2-app/frontend:prod
+
+      - name: Update Helm Values for Production
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+          UAT_TAG="${{ steps.uat_version.outputs.tag }}"
+          yq -i ".api.image.tag = \"$UAT_TAG\"" helm/ce10grp2-app/values-prod.yaml
+          yq -i ".frontend.image.tag = \"$UAT_TAG\"" helm/ce10grp2-app/values-prod.yaml
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add helm/ce10grp2-app/values-prod.yaml
+          git commit -m "Promote UAT version $UAT_TAG to Production"
+
+      - name: Create Pull Request to Production
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Promote UAT version ${{ steps.uat_version.outputs.tag }} to Production"
+          title: "Promote UAT version ${{ steps.uat_version.outputs.tag }} to Production"
+          body: "Please review and merge to deploy version `${{ steps.uat_version.outputs.tag }}` to the Production environment."
+          branch: "promote-prod-${{ steps.uat_version.outputs.tag }}"
+          base: "main"
