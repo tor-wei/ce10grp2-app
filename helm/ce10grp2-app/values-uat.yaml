@@ -4,6 +4,8 @@ api:
     tag: uat
   env:
     NODE_ENV: staging
+  service:
+    name: "ce10grp2-uat-ce10grp2-app-api"
 
 frontend:
   replicaCount: 2
@@ -11,6 +13,8 @@ frontend:
     tag: uat
   env:
     REACT_APP_API_URL: ""
+  service:
+    name: "ce10grp2-uat-ce10grp2-app-frontend"
 
 ingress:
   hosts:

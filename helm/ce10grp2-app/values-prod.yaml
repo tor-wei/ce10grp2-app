@@ -11,6 +11,8 @@ api:
       memory: 512Mi
   env:
     NODE_ENV: production
+  service:
+    name: "ce10grp2-prod-ce10grp2-app-api"
 
 frontend:
   replicaCount: 3
@@ -25,6 +27,8 @@ frontend:
       memory: 256Mi
   env:
     REACT_APP_API_URL: ""
+  service:
+    name: "ce10grp2-prod-ce10grp2-app-frontend"
 
 ingress:
   hosts:
