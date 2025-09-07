@@ -5,18 +5,18 @@ metadata:
   name: {{ include "ce10grp2-app.fullname" . }}-api
   labels:
     {{- include "ce10grp2-app.labels" . | nindent 4 }}
-    component: api
+    app.kubernetes.io/component: api
 spec:
   replicas: {{ .Values.api.replicaCount }}
   selector:
     matchLabels:
       {{- include "ce10grp2-app.selectorLabels" . | nindent 6 }}
-      component: api
+      app.kubernetes.io/component: api
   template:
     metadata:
       labels:
         {{- include "ce10grp2-app.selectorLabels" . | nindent 8 }}
-        component: api
+        app.kubernetes.io/component: api
     spec:
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
