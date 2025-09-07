@@ -7,7 +7,7 @@ spec:
   project: production
   source:
     repoURL: https://github.com/tor-wei/ce10grp2-app
-    path: helm/ce1008p2-app
+    path: helm/ce10grp2-app
     targetRevision: main
     helm:
       valueFiles:

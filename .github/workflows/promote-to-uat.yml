@@ -1,0 +1,77 @@
+# .github/workflows/promote-to-uat.yml
+name: Promote to UAT
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: "Commit SHA of the version to promote to UAT"
+        required: true
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+jobs:
+  promote:
+    name: Promote to UAT
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout uat branch
+        uses: actions/checkout@v4
+        with:
+          ref: uat
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-promote-uat
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify Images Exist in ECR
+        run: |
+          aws ecr describe-images --repository-name ce10grp2-app/api --image-ids imageTag=${{ github.event.inputs.git_sha }}
+          aws ecr describe-images --repository-name ce10grp2-app/frontend --image-ids imageTag=${{ github.event.inputs.git_sha }}
+
+      - name: Re-tag Images for UAT
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.inputs.git_sha }}
+        run: |
+          docker pull $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:uat
+          docker push $ECR_REGISTRY/ce10grp2-app/api:uat
+
+          docker pull $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:uat
+          docker push $ECR_REGISTRY/ce10grp2-app/frontend:uat
+
+      - name: Update Helm Values for UAT
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+          yq -i '.api.image.tag = "${{ github.event.inputs.git_sha }}"' helm/ce10grp2-app/values-uat.yaml
+          yq -i '.frontend.image.tag = "${{ github.event.inputs.git_sha }}"' helm/ce10grp2-app/values-uat.yaml
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add helm/ce10grp2-app/values-uat.yaml
+          git commit -m "Promote ${{ github.event.inputs.git_sha }} to UAT"
+
+      - name: Create Pull Request to UAT
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Promote ${{ github.event.inputs.git_sha }} to UAT"
+          title: "Promote ${{ github.event.inputs.git_sha }} to UAT"
+          body: "Please review and merge to deploy version `${{ github.event.inputs.git_sha }}` to the UAT environment."
+          branch: "promote-uat-${{ github.event.inputs.git_sha }}"
+          base: "uat"

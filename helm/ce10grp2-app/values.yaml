@@ -9,7 +9,7 @@ api:
   enabled: true
   replicaCount: 2
   image:
-    repository: "ce10grp2-app/api"
+    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app/api"
     tag: latest
     pullPolicy: IfNotPresent
 
@@ -37,7 +37,7 @@ frontend:
   enabled: true
   replicaCount: 2
   image:
-    repository: "ce10grp2-app/frontend"
+    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app/frontend"
     tag: latest
     pullPolicy: IfNotPresent
 

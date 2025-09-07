@@ -4,20 +4,17 @@ api:
     tag: uat
   env:
     NODE_ENV: staging
-    REDIS_URL: "redis://redis-service:6379"
 
 frontend:
   replicaCount: 2
   image:
     tag: uat
   env:
-    REACT_APP_API_URL: "https://a5f708e5cee604f7c860dc7c5fd7702a-43145271.ap-southeast-1.elb.amazonaws.com/api"
+    REACT_APP_API_URL: ""
 
 ingress:
-  annotations:
-    alb.ingress.kubernetes.io/certificate-arn: $UAT_CERT_ARN
   hosts:
-    - host: a5f708e5cee604f7c860dc7c5fd7702a-43145271.ap-southeast-1.elb.amazonaws.com
+    - host: ""
       paths:
         - path: /api
           pathType: Prefix
