@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ce10grp2-prod
+  namespace: argocd
+spec:
+  project: production
+  source:
+    repoURL: https://github.com/tor-wei/ce10grp2-app
+    path: helm/ce10grp2-app
+    targetRevision: main
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+  destination:
+    # For production cluster
+    server: https://prod-cluster-endpoint.eks.amazonaws.com
+    namespace: ce10grp2-prod
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true

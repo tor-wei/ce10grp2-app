@@ -1,0 +1,42 @@
+api:
+  replicaCount: 3
+  image:
+    tag: prod
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    NODE_ENV: production
+  service:
+    name: "ce10grp2-prod-ce10grp2-app-api"
+
+frontend:
+  replicaCount: 3
+  image:
+    tag: prod
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    REACT_APP_API_URL: ""
+  service:
+    name: "ce10grp2-prod-ce10grp2-app-frontend"
+
+ingress:
+  hosts:
+    - host: ""
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: frontend

@@ -1,0 +1,18 @@
+{{- if or .Values.api.env .Values.frontend.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ce10grp2-app.fullname" . }}
+  labels:
+    {{- include "ce10grp2-app.labels" . | nindent 4 }}
+data:
+  # API environment variables
+  {{- range $key, $val := .Values.api.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+
+  # Frontend environment variables (if any are added later)
+  {{- range $key, $val := .Values.frontend.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+{{- end }}

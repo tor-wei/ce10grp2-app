@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Node.js dependencies
+/api/node_modules
+/frontend/node_modules
+
 # Distribution / packaging
 .Python
 build/
@@ -205,3 +209,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local ignores
+.venv/
+*.bak
+iam_policy.json
+lbc-extra.json

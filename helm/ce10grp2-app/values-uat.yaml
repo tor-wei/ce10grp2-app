@@ -1,0 +1,28 @@
+api:
+  replicaCount: 2
+  image:
+    tag: uat
+  env:
+    NODE_ENV: staging
+  service:
+    name: "ce10grp2-uat-ce10grp2-app-api"
+
+frontend:
+  replicaCount: 2
+  image:
+    tag: uat
+  env:
+    REACT_APP_API_URL: ""
+  service:
+    name: "ce10grp2-uat-ce10grp2-app-frontend"
+
+ingress:
+  hosts:
+    - host: ""
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: frontend
