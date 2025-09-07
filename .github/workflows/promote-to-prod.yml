@@ -6,6 +6,10 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
+  NON_PROD_API_ECR: ${{ secrets.NON_PROD_API_ECR }}
+  NON_PROD_FRONTEND_ECR: ${{ secrets.NON_PROD_FRONTEND_ECR }}
+  PROD_API_ECR: ${{ secrets.PROD_API_ECR }}
+  PROD_FRONTEND_ECR: ${{ secrets.PROD_FRONTEND_ECR }}
 
 jobs:
   promote:
@@ -50,13 +54,15 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.uat_version.outputs.tag }}
         run: |
-          docker pull $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:prod
-          docker push $ECR_REGISTRY/ce10grp2-app/api:prod
+          docker pull $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:$IMAGE_TAG $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:prod
+          # Push to prod ECR
+          docker push $ECR_REGISTRY/${{ env.PROD_API_ECR }}:prod
 
-          docker pull $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:prod
-          docker push $ECR_REGISTRY/ce10grp2-app/frontend:prod
+          docker pull $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:$IMAGE_TAG $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:prod
+          # Push to prod ECR
+          docker push $ECR_REGISTRY/${{ env.PROD_FRONTEND_ECR }}:prod
 
       - name: Update Helm Values for Production
         run: |
