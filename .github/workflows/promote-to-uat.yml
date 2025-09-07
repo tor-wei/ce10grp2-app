@@ -10,6 +10,8 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
+  NON_PROD_API_ECR: ${{ secrets.NON_PROD_API_ECR }}
+  NON_PROD_FRONTEND_ECR: ${{ secrets.NON_PROD_FRONTEND_ECR }}
 
 jobs:
   promote:
@@ -39,21 +41,21 @@ jobs:
 
       - name: Verify Images Exist in ECR
         run: |
-          aws ecr describe-images --repository-name ce10grp2-app/api --image-ids imageTag=${{ github.event.inputs.git_sha }}
-          aws ecr describe-images --repository-name ce10grp2-app/frontend --image-ids imageTag=${{ github.event.inputs.git_sha }}
+          aws ecr describe-images --repository-name ${{ env.NON_PROD_API_ECR }} --image-ids imageTag=${{ github.event.inputs.git_sha }}
+          aws ecr describe-images --repository-name ${{ env.NON_PROD_FRONTEND_ECR }} --image-ids imageTag=${{ github.event.inputs.git_sha }}
 
       - name: Re-tag Images for UAT
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.event.inputs.git_sha }}
         run: |
-          docker pull $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/ce10grp2-app/api:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/api:uat
-          docker push $ECR_REGISTRY/ce10grp2-app/api:uat
+          docker pull $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:$IMAGE_TAG $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:uat
+          docker push $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:uat
 
-          docker pull $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/ce10grp2-app/frontend:$IMAGE_TAG $ECR_REGISTRY/ce10grp2-app/frontend:uat
-          docker push $ECR_REGISTRY/ce10grp2-app/frontend:uat
+          docker pull $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:$IMAGE_TAG $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:uat
+          docker push $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:uat
 
       - name: Update Helm Values for UAT
         run: |
