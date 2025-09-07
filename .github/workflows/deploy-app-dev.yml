@@ -1,0 +1,57 @@
+name: Deploy app-dev (EKS Fargate)
+
+on:
+  push:
+    branches: [dev]
+    paths: ["k8s/**", ".github/workflows/deploy-app-dev.yml"]
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Container image to deploy (optional)"
+        required: false
+        default: "nginx:alpine"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  EKS_CLUSTER: ce10grp2-monica-eks
+  K8S_NAMESPACE: app-dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+
+      - name: Ensure namespace exists
+        run: kubectl get ns "$K8S_NAMESPACE" || kubectl create ns "$K8S_NAMESPACE"
+
+      - name: Apply RBAC and app
+        run: |
+          kubectl apply -f k8s/rbac/
+          kubectl apply -f k8s/deploy/web.yaml
+          kubectl apply -f k8s/svc/web-lb.yaml
+
+      - name: Optional set image (manual run)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image != '' }}
+        run: kubectl -n "$K8S_NAMESPACE" set image deploy/web web="${{ github.event.inputs.image }}"
+
+      - name: Wait for rollout
+        run: kubectl -n "$K8S_NAMESPACE" rollout status deploy/web --timeout=180s
+
+      - name: Show Service external hostname
+        run: |
+          kubectl -n "$K8S_NAMESPACE" get svc web-lb -o wide
+          echo "URL: http://$(kubectl -n "$K8S_NAMESPACE" get svc web-lb -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/"

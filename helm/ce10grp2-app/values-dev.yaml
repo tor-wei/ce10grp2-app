@@ -1,0 +1,33 @@
+api:
+  replicaCount: 1
+  image:
+    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/api"
+    tag: "f991d02"
+  env:
+    NODE_ENV: development
+    DEBUG: "true"
+    REDIS_URL: "redis://redis-service:6379"
+  service:
+    name: "ce10grp2-dev-ce10grp2-app-api"
+frontend:
+  replicaCount: 1
+  image:
+    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/frontend"
+    tag: f991d02
+  env:
+    REACT_APP_API_URL: "http://dev.lingo.ce10grp2.sctp-sandbox.com/api"
+  service:
+    name: "ce10grp2-dev-ce10grp2-app-frontend"
+ingress:
+  metadata:
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "dev.lingo.ce10grp2.sctp-sandbox.com"
+  hosts:
+    - host: "dev.lingo.ce10grp2.sctp-sandbox.com"
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: api
+        - path: /
+          pathType: Prefix
+          service: frontend
