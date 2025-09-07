@@ -14,10 +14,13 @@ frontend:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app/frontend"
     tag: 532eafc
   env:
-    REACT_APP_API_URL: "https://a5f708e5cee604f7c860dc7c5fd7702a-43145271.ap-southeast-1.elb.amazonaws.com/api"
+    REACT_APP_API_URL: "http://dev.lingo.ce10grp2.sctp-sandbox.com/api"
 ingress:
+  metadata:
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: "dev.lingo.ce10grp2.sctp-sandbox.com"
   hosts:
-    - host: "a5f708e5cee604f7c860dc7c5fd7702a-43145271.ap-southeast-1.elb.amazonaws.com"
+    - host: "dev.lingo.ce10grp2.sctp-sandbox.com"
       paths:
         - path: /api
           pathType: Prefix
