@@ -73,25 +73,31 @@ jobs:
             ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.primary_tag }}
             ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.sha_tag }}
 
+      - name: Tag and Push ':dev' Image
+        # This step only runs for pushes to the 'dev' branch, not for release tags
+        if: steps.tags.outputs.is_release == 'false'
+        run: |
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          IMAGE_SHA_TAG=${{ steps.tags.outputs.sha_tag }}
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_SHA_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
+
       - name: Update Helm Chart for Dev
+        if: steps.tags.outputs.is_release == 'false'
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
           yq -i '.frontend.image.tag = "${{ steps.tags.outputs.primary_tag }}"' helm/ce10grp2-app/values-dev.yaml
 
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add helm/ce10grp2-app/values-dev.yaml
-          git commit -m "Update dev frontend image tag to ${{ steps.tags.outputs.primary_tag }}"
-
       - name: Create Pull Request to Dev
+        if: steps.tags.outputs.is_release == 'false'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update dev frontend image tag to ${{ steps.tags.outputs.primary_tag }}"
+          base: "dev"
+          branch: "ci/promote-dev-frontend-${{ steps.tags.outputs.primary_tag }}"
           title: "CI: Update dev frontend image tag to ${{ steps.tags.outputs.primary_tag }}"
           body: "Automated PR to deploy Frontend version `${{ steps.tags.outputs.primary_tag }}` to the DEV environment."
-          branch: "promote-dev-frontend-${{ steps.tags.outputs.primary_tag }}"
-          base: "dev"
+          commit-message: "Update dev frontend image tag to ${{ steps.tags.outputs.primary_tag }}"
 
   scan-frontend:
     name: Security Scan Frontend Image

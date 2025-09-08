@@ -83,24 +83,21 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
 
       - name: Update Helm Chart for Dev
+        if: steps.tags.outputs.is_release == 'false'
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
           yq -i '.api.image.tag = "${{ steps.tags.outputs.primary_tag }}"' helm/ce10grp2-app/values-dev.yaml
 
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add helm/ce10grp2-app/values-dev.yaml
-          git commit -m "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
-
       - name: Create Pull Request to Dev
+        if: steps.tags.outputs.is_release == 'false'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
+          base: "dev"
+          branch: "ci/promote-dev-api-${{ steps.tags.outputs.primary_tag }}"
           title: "CI: Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
           body: "Automated PR to deploy API version `${{ steps.tags.outputs.primary_tag }}` to the DEV environment."
-          branch: "promote-dev-api-${{ steps.tags.outputs.primary_tag }}"
-          base: "dev"
+          commit-message: "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
 
   scan-backend:
     name: Security Scan API Image
