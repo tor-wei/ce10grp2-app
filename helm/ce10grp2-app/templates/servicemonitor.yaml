@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ce10grp2-api-servicemonitor
+  namespace: monitoring                # Prometheus is running here
+  labels:
+    team: myApp                        # Must match your prometheus.serviceMonitorSelector.matchExpressions
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ce10grp2-app
+      app.kubernetes.io/component: api
+  namespaceSelector:
+    matchNames:
+      - ce10grp2-dev
+      - ce10grp2-uat
+      - ce10grp2-prod
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
