@@ -5,7 +5,7 @@ api:
     tag: prod
   env:
     NODE_ENV: prod
-    DEBUG: "false"
+    DEBUG: "true"
     REDIS_URL: "redis://redis-service:6379"
   service:
     name: "ce10grp2-prod-ce10grp2-app-api"
@@ -13,7 +13,7 @@ api:
 frontend:
   replicaCount: 1
   image:
-    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-prod/frontend"
+    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/frontend"
     tag: prod
   env:
     REACT_APP_API_URL: "http://lingo.ce10grp2.sctp-sandbox.com/api"
