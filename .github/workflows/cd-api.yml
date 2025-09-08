@@ -64,14 +64,20 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push API Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./api
-          push: true
-          # Apply multiple tags: the primary tag (version or SHA) and the SHA tag
-          tags: |
-            ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.primary_tag }}
-            ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.sha_tag }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          PRIMARY_TAG: ${{ steps.tags.outputs.primary_tag }}
+          SHA_TAG: ${{ steps.tags.outputs.sha_tag }}
+        run: |
+          # Build the image once and apply both tags simultaneously
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$PRIMARY_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG \
+            ./api
+
+          # Push each tag to the ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$PRIMARY_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG
 
       - name: Tag and Push ':dev' Image
         # This step only runs for pushes to the 'dev' branch, not for release tags
@@ -83,24 +89,21 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
 
       - name: Update Helm Chart for Dev
+        if: steps.tags.outputs.is_release == 'false'
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
           yq -i '.api.image.tag = "${{ steps.tags.outputs.primary_tag }}"' helm/ce10grp2-app/values-dev.yaml
 
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add helm/ce10grp2-app/values-dev.yaml
-          git commit -m "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
-
       - name: Create Pull Request to Dev
+        if: steps.tags.outputs.is_release == 'false'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
+          base: "dev"
+          branch: "ci/promote-dev-api-${{ steps.tags.outputs.primary_tag }}"
           title: "CI: Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
           body: "Automated PR to deploy API version `${{ steps.tags.outputs.primary_tag }}` to the DEV environment."
-          branch: "promote-dev-api-${{ steps.tags.outputs.primary_tag }}"
-          base: "dev"
+          commit-message: "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
 
   scan-backend:
     name: Security Scan API Image
