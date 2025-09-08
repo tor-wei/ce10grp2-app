@@ -14,15 +14,15 @@ api:
     requests:
       cpu: 500m
       memory: 512Mi
-  env:
-    NODE_ENV: production
   service:
     name: "ce10grp2-prod-ce10grp2-app-api"
 frontend:
-  replicaCount: 3
+  replicaCount: 5
   image:
-    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/api"
-    tag: 1fa9c35
+    repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/frontend"
+    tag: prod
+  env:
+    REACT_APP_API_URL: "http://lingo.ce10grp2.sctp-sandbox.com/api"
   resources:
     limits:
       cpu: 500m
@@ -30,8 +30,6 @@ frontend:
     requests:
       cpu: 250m
       memory: 256Mi
-  env:
-    REACT_APP_API_URL: "http://lingo.ce10grp2.sctp-sandbox.com/api"
   service:
     name: "ce10grp2-prod-ce10grp2-app-frontend"
 ingress:
