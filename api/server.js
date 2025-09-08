@@ -191,10 +191,14 @@ async function initRedis() {
 }
 
 // Start server
-app.listen(port, () => {
-  console.log(`API Server running on port ${port}`);
-  initRedis();
-});
+async function startServer() {
+  await initRedis(); // Await Redis connection before starting server
+  app.listen(port, () => {
+    console.log(`API Server running on port ${port}`);
+  });
+}
+
+startServer(); // Call the async function to start the application
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
