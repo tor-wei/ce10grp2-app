@@ -1,5 +1,5 @@
 api:
-  replicaCount: 1
+  replicaCount: 3
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/api"
     tag: prod
@@ -18,7 +18,7 @@ api:
     name: "ce10grp2-prod-ce10grp2-app-api"
 
 frontend:
-  replicaCount: 1
+  replicaCount: 5
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/frontend"
     tag: prod
