@@ -41,9 +41,18 @@ jobs:
 
           # Check if the trigger was a tag push
           if [[ "${{ github.ref }}" == refs/tags/frontend-v* ]]; then
-            # The primary tag is the Git tag itself (e.g., "frontend-v1.2.1")
-            PRIMARY_TAG="${{ github.ref_name }}"
-            echo "primary_tag=${PRIMARY_TAG}" >> $GITHUB_OUTPUT
+            # Read the version from the file and construct the expected tag name
+            VERSION_FROM_FILE="frontend-v$(cat frontend/version.txt)"
+            PUSHED_TAG="${{ github.ref_name }}"
+
+            # Validate that the pushed tag matches the version in the file
+            if [[ "$PUSHED_TAG" != "$VERSION_FROM_FILE" ]]; then
+              echo "Error: Pushed tag ($PUSHED_TAG) does not match version in frontend/version.txt ($VERSION_FROM_FILE)."
+              exit 1
+            fi
+
+            # Use the validated pushed tag as the primary tag for the release image
+            echo "primary_tag=${PUSHED_TAG}" >> $GITHUB_OUTPUT
             echo "is_release=true" >> $GITHUB_OUTPUT
           else
             # For pushes to dev, the primary tag is the short SHA
