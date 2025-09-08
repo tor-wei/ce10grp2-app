@@ -14,8 +14,7 @@ spec:
         - values.yaml
         - values-prod.yaml
   destination:
-    # For production cluster
-    server: https://prod-cluster-endpoint.eks.amazonaws.com
+    server: https://kubernetes.default.svc
     namespace: ce10grp2-prod
   syncPolicy:
     syncOptions:
