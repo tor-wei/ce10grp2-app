@@ -1,12 +1,24 @@
 # .github/workflows/promote-to-uat.yml
-name: Promote to UAT
+name: Promote to UAT (SHA + Tag)
 
 on:
   workflow_dispatch:
     inputs:
-      git_sha:
-        description: "Commit SHA of the version to promote to UAT"
+      version_tag:
+        description: "Version tag to promote (e.g., api-v1.2.1, frontend-v2.5.0)"
         required: true
+      git_sha:
+        description: "Optional: Corresponding Git SHA for traceability in the PR."
+        required: false
+      components:
+        description: "Which component(s) to promote with this version tag"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - api
+          - frontend
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -39,41 +51,67 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify Images Exist in ECR
+      - name: Verify API Image Exists in ECR
+        if: ${{ github.event.inputs.components == 'api' || github.event.inputs.components == 'both' }}
         run: |
-          aws ecr describe-images --repository-name ${{ env.NON_PROD_API_ECR }} --image-ids imageTag=${{ github.event.inputs.git_sha }}
-          aws ecr describe-images --repository-name ${{ env.NON_PROD_FRONTEND_ECR }} --image-ids imageTag=${{ github.event.inputs.git_sha }}
+          echo "Verifying API image with tag: ${{ github.event.inputs.version_tag }}"
+          aws ecr describe-images --repository-name ${{ env.NON_PROD_API_ECR }} --image-ids imageTag=${{ github.event.inputs.version_tag }}
 
-      - name: Re-tag Images for UAT
+      - name: Verify Frontend Image Exists in ECR
+        if: ${{ github.event.inputs.components == 'frontend' || github.event.inputs.components == 'both' }}
+        run: |
+          echo "Verifying Frontend image with tag: ${{ github.event.inputs.version_tag }}"
+          aws ecr describe-images --repository-name ${{ env.NON_PROD_FRONTEND_ECR }} --image-ids imageTag=${{ github.event.inputs.version_tag }}
+
+      - name: Re-tag API Image for UAT
+        if: ${{ github.event.inputs.components == 'api' || github.event.inputs.components == 'both' }}
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.event.inputs.git_sha }}
         run: |
-          docker pull $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:$IMAGE_TAG $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:uat
+          docker pull $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:${{ github.event.inputs.version_tag }}
+          docker tag $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:${{ github.event.inputs.version_tag }} $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:uat
           docker push $ECR_REGISTRY/${{ env.NON_PROD_API_ECR }}:uat
 
-          docker pull $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:$IMAGE_TAG $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:uat
+      - name: Re-tag Frontend Image for UAT
+        if: ${{ github.event.inputs.components == 'frontend' || github.event.inputs.components == 'both' }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker pull $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:${{ github.event.inputs.version_tag }}
+          docker tag $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:${{ github.event.inputs.version_tag }} $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:uat
           docker push $ECR_REGISTRY/${{ env.NON_PROD_FRONTEND_ECR }}:uat
 
       - name: Update Helm Values for UAT
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          yq -i '.api.image.tag = "${{ github.event.inputs.git_sha }}"' helm/ce10grp2-app/values-uat.yaml
-          yq -i '.frontend.image.tag = "${{ github.event.inputs.git_sha }}"' helm/ce10grp2-app/values-uat.yaml
+
+          if [[ "${{ github.event.inputs.components }}" == "api" || "${{ github.event.inputs.components }}" == "both" ]]; then
+            echo "Updating API image tag to ${{ github.event.inputs.version_tag }}"
+            yq -i '.api.image.tag = "${{ github.event.inputs.version_tag }}"' helm/ce10grp2-app/values-uat.yaml
+          fi
+
+          if [[ "${{ github.event.inputs.components }}" == "frontend" || "${{ github.event.inputs.components }}" == "both" ]]; then
+            echo "Updating Frontend image tag to ${{ github.event.inputs.version_tag }}"
+            yq -i '.frontend.image.tag = "${{ github.event.inputs.version_tag }}"' helm/ce10grp2-app/values-uat.yaml
+          fi
 
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-uat.yaml
-          git commit -m "Promote ${{ github.event.inputs.git_sha }} to UAT"
+          git commit -m "Promote ${{ github.event.inputs.components }} (${{ github.event.inputs.version_tag }}) to UAT"
 
       - name: Create Pull Request to UAT
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Promote ${{ github.event.inputs.git_sha }} to UAT"
-          title: "Promote ${{ github.event.inputs.git_sha }} to UAT"
-          body: "Please review and merge to deploy version `${{ github.event.inputs.git_sha }}` to the UAT environment."
-          branch: "promote-uat-${{ github.event.inputs.git_sha }}"
+          commit-message: Promote ${{ github.event.inputs.components }} (${{ github.event.inputs.version_tag }}) to UAT
+          title: "Promote ${{ github.event.inputs.components }} version ${{ github.event.inputs.version_tag }} to UAT"
+          body: |
+            This PR promotes a new version for the **${{ github.event.inputs.components }}** component(s) to the UAT environment.
+
+            - **Version Tag:** `${{ github.event.inputs.version_tag }}`
+            ${{ github.event.inputs.git_sha != '' && format('- **Commit SHA:** `{0}`', github.event.inputs.git_sha) || '' }}
+
+            Please review and merge to deploy.
+          branch: "promote-uat-${{ github.event.inputs.components }}-${{ github.event.inputs.version_tag }}"
           base: "uat"
