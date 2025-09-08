@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: production
+  namespace: argocd
+spec:
+  description: Lingo for Production
+  sourceRepos:
+    - https://github.com/tor-wei/ce10grp2-app
+  destinations:
+    - namespace: ce10grp2-prod
+      server: https://kubernetes.default.svc
+  destinations:
+    - namespace: '*'
+      server: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
