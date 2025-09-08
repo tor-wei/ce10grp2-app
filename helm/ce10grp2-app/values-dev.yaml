@@ -13,7 +13,7 @@ frontend:
   replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/frontend"
-    tag: 1bf07e7
+    tag: 6d84b60
   env:
     REACT_APP_API_URL: "http://dev.lingo.ce10grp2.sctp-sandbox.com/api"
   service:
