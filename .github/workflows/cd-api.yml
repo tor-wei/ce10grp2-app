@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - dev
+    # Add a trigger for tags matching the 'api-v*' pattern
+    tags:
+      - "api-v*"
     paths:
       - "api/**"
       - ".github/workflows/cd-backend.yml"
@@ -22,15 +25,32 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      image_tag: ${{ steps.vars.outputs.sha }}
+      # This output will be the main tag used (either the version or the SHA)
+      primary_tag: ${{ steps.tags.outputs.primary_tag }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set Image Tag variable
-        id: vars
-        run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+      - name: Define Image Tags
+        id: tags
+        run: |
+          # Get the short commit SHA, which will always be a tag
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "sha_tag=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+          # Check if the trigger was a tag push
+          if [[ "${{ github.ref }}" == refs/tags/api-v* ]]; then
+            # The primary tag is the Git tag itself (e.g., "api-v1.2.1")
+            PRIMARY_TAG="${{ github.ref_name }}"
+            echo "primary_tag=${PRIMARY_TAG}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            # For pushes to dev, the primary tag is the short SHA
+            PRIMARY_TAG="${SHORT_SHA}"
+            echo "primary_tag=${PRIMARY_TAG}" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -44,33 +64,42 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push API Image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ steps.vars.outputs.sha }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          push: true
+          # Apply multiple tags: the primary tag (version or SHA) and the SHA tag
+          tags: |
+            ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.primary_tag }}
+            ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.sha_tag }}
+
+      - name: Tag and Push ':dev' Image
+        # This step only runs for pushes to the 'dev' branch, not for release tags
+        if: steps.tags.outputs.is_release == 'false'
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./api
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          IMAGE_SHA_TAG=${{ steps.tags.outputs.sha_tag }}
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_SHA_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
 
       - name: Update Helm Chart for Dev
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          yq -i '.api.image.tag = "${{ steps.vars.outputs.sha }}"' helm/ce10grp2-app/values-dev.yaml
+          yq -i '.api.image.tag = "${{ steps.tags.outputs.primary_tag }}"' helm/ce10grp2-app/values-dev.yaml
 
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add helm/ce10grp2-app/values-dev.yaml
-          git commit -m "Update dev api image tag to ${{ steps.vars.outputs.sha }}"
+          git commit -m "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
 
       - name: Create Pull Request to Dev
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update dev api image tag to ${{ steps.vars.outputs.sha }}"
-          title: "CI: Update dev api image tag to ${{ steps.vars.outputs.sha }}"
-          body: "Automated PR to deploy API version `${{ steps.vars.outputs.sha }}` to the DEV environment."
-          branch: "promote-dev-api-${{ steps.vars.outputs.sha }}"
+          commit-message: "Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
+          title: "CI: Update dev api image tag to ${{ steps.tags.outputs.primary_tag }}"
+          body: "Automated PR to deploy API version `${{ steps.tags.outputs.primary_tag }}` to the DEV environment."
+          branch: "promote-dev-api-${{ steps.tags.outputs.primary_tag }}"
           base: "dev"
 
   scan-backend:
@@ -97,7 +126,7 @@ jobs:
       - name: Run Trivy scan on API image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build-backend.outputs.image_tag }}"
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build-backend.outputs.primary_tag }}"
           format: "sarif"
           output: "trivy-api-results.sarif"
           severity: "CRITICAL,HIGH"
