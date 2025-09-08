@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - dev
+    # Add a trigger for tags matching the 'frontend-v*' pattern
+    tags:
+      - "frontend-v*"
     paths:
       - "frontend/**"
       - ".github/workflows/cd-frontend.yml"
@@ -22,15 +25,41 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      image_tag: ${{ steps.vars.outputs.sha }}
+      # This output will be the main tag used (either the version or the SHA)
+      primary_tag: ${{ steps.tags.outputs.primary_tag }}
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set Image Tag variable
-        id: vars
-        run: echo "sha=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+      - name: Define Image Tags
+        id: tags
+        run: |
+          # Get the short commit SHA, which will always be a tag
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "sha_tag=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+          # Check if the trigger was a tag push
+          if [[ "${{ github.ref }}" == refs/tags/frontend-v* ]]; then
+            # Read the version from the file and construct the expected tag name
+            VERSION_FROM_FILE="frontend-v$(cat frontend/version.txt)"
+            PUSHED_TAG="${{ github.ref_name }}"
+
+            # Validate that the pushed tag matches the version in the file
+            if [[ "$PUSHED_TAG" != "$VERSION_FROM_FILE" ]]; then
+              echo "Error: Pushed tag ($PUSHED_TAG) does not match version in frontend/version.txt ($VERSION_FROM_FILE)."
+              exit 1
+            fi
+
+            # Use the validated pushed tag as the primary tag for the release image
+            echo "primary_tag=${PUSHED_TAG}" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            # For pushes to dev, the primary tag is the short SHA
+            PRIMARY_TAG="${SHORT_SHA}"
+            echo "primary_tag=${PRIMARY_TAG}" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -43,35 +72,47 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push Frontend Image
+      - name: Build and Push Frontend Image (Manual Method)
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ steps.vars.outputs.sha }}
+          PRIMARY_TAG: ${{ steps.tags.outputs.primary_tag }}
+          SHA_TAG: ${{ steps.tags.outputs.sha_tag }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./frontend
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
+          # Build the image once and apply both tags simultaneously
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$PRIMARY_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG \
+            ./frontend
+
+          # Push each tag to the ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$PRIMARY_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG
+
+      - name: Tag and Push ':dev' Image
+        # This step only runs for pushes to the 'dev' branch, not for release tags
+        if: steps.tags.outputs.is_release == 'false'
+        run: |
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          IMAGE_SHA_TAG=${{ steps.tags.outputs.sha_tag }}
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_SHA_TAG $ECR_REGISTRY/$ECR_REPOSITORY:dev
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:dev
 
       - name: Update Helm Chart for Dev
+        if: steps.tags.outputs.is_release == 'false'
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          yq -i '.frontend.image.tag = "${{ steps.vars.outputs.sha }}"' helm/ce10grp2-app/values-dev.yaml
-
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add helm/ce10grp2-app/values-dev.yaml
-          git commit -m "Update dev frontend image tag to ${{ steps.vars.outputs.sha }}"
+          yq -i '.frontend.image.tag = "${{ steps.tags.outputs.primary_tag }}"' helm/ce10grp2-app/values-dev.yaml
 
       - name: Create Pull Request to Dev
+        if: steps.tags.outputs.is_release == 'false'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update dev frontend image tag to ${{ steps.vars.outputs.sha }}"
-          title: "CI: Update dev frontend image tag to ${{ steps.vars.outputs.sha }}"
-          body: "Automated PR to deploy Frontend version `${{ steps.vars.outputs.sha }}` to the DEV environment."
-          branch: "promote-dev-frontend-${{ steps.vars.outputs.sha }}"
           base: "dev"
+          branch: "ci/promote-dev-frontend-${{ steps.tags.outputs.primary_tag }}"
+          title: "CI: Update dev frontend image tag to ${{ steps.tags.outputs.primary_tag }}"
+          body: "Automated PR to deploy Frontend version `${{ steps.tags.outputs.primary_tag }}` to the DEV environment."
+          commit-message: "Update dev frontend image tag to ${{ steps.tags.outputs.primary_tag }}"
 
   scan-frontend:
     name: Security Scan Frontend Image
@@ -97,7 +138,7 @@ jobs:
       - name: Run Trivy scan on Frontend image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build-frontend.outputs.image_tag }}"
+          image-ref: "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build-frontend.outputs.primary_tag }}"
           format: "sarif"
           output: "trivy-frontend-results.sarif"
           severity: "CRITICAL,HIGH"

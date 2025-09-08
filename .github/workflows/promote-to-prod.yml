@@ -3,6 +3,16 @@ name: Promote UAT to Production
 
 on:
   workflow_dispatch:
+    inputs:
+      components:
+        description: "Which component(s) to promote from UAT to Production"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - api
+          - frontend
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -26,12 +36,16 @@ jobs:
         with:
           ref: uat
 
-      - name: Get current UAT image tag
-        id: uat_version
+      - name: Get current UAT image tags
+        id: uat_versions
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          UAT_TAG=$(yq '.api.image.tag' helm/ce10grp2-app/values-uat.yaml)
-          echo "tag=$UAT_TAG" >> $GITHUB_OUTPUT
+          API_TAG=$(yq '.api.image.tag' helm/ce10grp2-app/values-uat.yaml)
+          FRONTEND_TAG=$(yq '.frontend.image.tag' helm/ce10grp2-app/values-uat.yaml)
+          echo "api_tag=$API_TAG" >> $GITHUB_OUTPUT
+          echo "frontend_tag=$FRONTEND_TAG" >> $GITHUB_OUTPUT
+          echo "UAT API is version $API_TAG"
+          echo "UAT Frontend is version $FRONTEND_TAG"
 
       - name: Checkout main branch for update
         uses: actions/checkout@v4
@@ -49,43 +63,95 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Re-tag Images for Production
+      - name: Promote API Image to Production ECR
+        if: ${{ github.event.inputs.components == 'api' || github.event.inputs.components == 'both' }}
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ steps.uat_version.outputs.tag }}
+          IMAGE_TAG: ${{ steps.uat_versions.outputs.api_tag }}
         run: |
+          echo "Promoting API image $IMAGE_TAG from Non-Prod to Prod ECR"
           docker pull $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_API_ECR:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_API_ECR:prod
-          # Push to prod ECR
           docker push $ECR_REGISTRY/$PROD_API_ECR:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$PROD_API_ECR:prod
 
+      - name: Promote Frontend Image to Production ECR
+        if: ${{ github.event.inputs.components == 'frontend' || github.event.inputs.components == 'both' }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.uat_versions.outputs.frontend_tag }}
+        run: |
+          echo "Promoting Frontend image $IMAGE_TAG from Non-Prod to Prod ECR"
           docker pull $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_FRONTEND_ECR:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_FRONTEND_ECR:prod
-          # Push to prod ECR
           docker push $ECR_REGISTRY/$PROD_FRONTEND_ECR:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$PROD_FRONTEND_ECR:prod
 
+      - name: Set up PR details
+        id: pr_details
+        # Pass the outputs from the previous step into this script's environment
+        env:
+          COMPONENTS: ${{ github.event.inputs.components }}
+          API_TAG: ${{ steps.uat_versions.outputs.api_tag }}
+          FRONTEND_TAG: ${{ steps.uat_versions.outputs.frontend_tag }}
+        run: |
+          if [[ "$COMPONENTS" == "both" ]]; then
+            TITLE="Promote API ($API_TAG) & Frontend ($FRONTEND_TAG) to Production"
+            BODY=$(cat <<EOF
+          This PR promotes the versions currently in UAT to the Production environment.
+
+          - **API Version:** \`$API_TAG\`
+          - **Frontend Version:** \`$FRONTEND_TAG\`
+
+          Please review and merge to deploy.
+          EOF
+          )
+          else
+            # Handles 'api' or 'frontend' selection
+            local TAG_VALUE=""
+            local COMPONENT_NAME=""
+            if [[ "$COMPONENTS" == "api" ]]; then
+              TAG_VALUE="$API_TAG"
+              COMPONENT_NAME="API"
+            else
+              TAG_VALUE="$FRONTEND_TAG"
+              COMPONENT_NAME="Frontend"
+            fi
+            
+            TITLE="Promote $COMPONENT_NAME ($TAG_VALUE) to Production"
+            BODY=$(cat <<EOF
+          This PR promotes the version currently in UAT to the Production environment.
+
+          - **$COMPONENT_NAME Version:** \`$TAG_VALUE\`
+
+          Please review and merge to deploy.
+          EOF
+          )
+          fi
+          # Use multiline string outputs for use in the next step
+          echo "title<<EOF" >> $GITHUB_OUTPUT
+          echo "$TITLE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # STEP 1: Modify the files in a dedicated 'run' step
       - name: Update Helm Values for Production
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          UAT_TAG="${{ steps.uat_version.outputs.tag }}"
-          yq -i ".api.image.tag = \"$UAT_TAG\"" helm/ce10grp2-app/values-prod.yaml
-          yq -i ".frontend.image.tag = \"$UAT_TAG\"" helm/ce10grp2-app/values-prod.yaml
+          if [[ "${{ github.event.inputs.components }}" == "api" || "${{ github.event.inputs.components }}" == "both" ]]; then
+            yq -i '.api.image.tag = "${{ steps.uat_versions.outputs.api_tag }}"' helm/ce10grp2-app/values-prod.yaml
+          fi
+          if [[ "${{ github.event.inputs.components }}" == "frontend" || "${{ github.event.inputs.components }}" == "both" ]]; then
+            yq -i '.frontend.image.tag = "${{ steps.uat_versions.outputs.frontend_tag }}"' helm/ce10grp2-app/values-prod.yaml
+          fi
 
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add helm/ce10grp2-app/values-prod.yaml
-          git commit -m "Promote UAT version $UAT_TAG to Production"
-
+      # STEP 2: Create the PR with the changes made in the step above
       - name: Create Pull Request to Production
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Promote UAT version ${{ steps.uat_version.outputs.tag }} to Production"
-          title: "Promote UAT version ${{ steps.uat_version.outputs.tag }} to Production"
-          body: "Please review and merge to deploy version `${{ steps.uat_version.outputs.tag }}` to the Production environment."
-          branch: "promote-prod-${{ steps.uat_version.outputs.tag }}"
           base: "main"
+          branch: "promote-prod/${{ github.event.inputs.components }}-${{ github.run_id }}"
+          title: ${{ steps.pr_details.outputs.title }}
+          body: ${{ steps.pr_details.outputs.body }}
+          commit-message: ${{ steps.pr_details.outputs.title }}
