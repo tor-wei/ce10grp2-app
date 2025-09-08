@@ -58,12 +58,14 @@ jobs:
           docker tag $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_API_ECR:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_API_ECR:prod
           # Push to prod ECR
+          docker push $ECR_REGISTRY/$PROD_API_ECR:$IMAGE_TAG
           docker push $ECR_REGISTRY/$PROD_API_ECR:prod
 
           docker pull $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_FRONTEND_ECR:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_FRONTEND_ECR:prod
           # Push to prod ECR
+          docker push $ECR_REGISTRY/$PROD_FRONTEND_ECR:$IMAGE_TAG
           docker push $ECR_REGISTRY/$PROD_FRONTEND_ECR:prod
 
       - name: Update Helm Values for Production
