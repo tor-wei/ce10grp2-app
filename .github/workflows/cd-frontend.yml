@@ -63,15 +63,21 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          # Apply multiple tags: the primary tag (version or SHA) and the SHA tag
-          tags: |
-            ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.primary_tag }}
-            ${{ env.ECR_REPOSITORY }}:${{ steps.tags.outputs.sha_tag }}
+      - name: Build and Push Frontend Image (Manual Method)
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          PRIMARY_TAG: ${{ steps.tags.outputs.primary_tag }}
+          SHA_TAG: ${{ steps.tags.outputs.sha_tag }}
+        run: |
+          # Build the image once and apply both tags simultaneously
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$PRIMARY_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG \
+            ./frontend
+
+          # Push each tag to the ECR
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$PRIMARY_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG
 
       - name: Tag and Push ':dev' Image
         # This step only runs for pushes to the 'dev' branch, not for release tags
