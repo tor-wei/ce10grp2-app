@@ -2,7 +2,7 @@ api:
   replicaCount: 3
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/api"
-    tag: prod
+    tag: 1fa9c35
   env:
     NODE_ENV: prod
     DEBUG: "false"
@@ -16,7 +16,6 @@ api:
       memory: 512Mi
   service:
     name: "ce10grp2-prod-ce10grp2-app-api"
-
 frontend:
   replicaCount: 5
   image:
@@ -33,7 +32,6 @@ frontend:
       memory: 256Mi
   service:
     name: "ce10grp2-prod-ce10grp2-app-frontend"
-
 ingress:
   metadata:
   annotations:
