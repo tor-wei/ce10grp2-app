@@ -96,9 +96,9 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           if [ "$ENV_NAME" == "uat" ]; then
-            IMAGE_TAG="v{ $APP_VERSION }-rc"
+            IMAGE_TAG="v${APP_VERSION}-rc"
           elif [ "$ENV_NAME" == "prod" ]; then
-            IMAGE_TAG="v${ $APP_VERSION }"
+            IMAGE_TAG="v${APP_VERSION}"
           fi
 
           echo "ECR_REGISTRY=$ECR_REGISTRY"
