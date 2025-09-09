@@ -100,6 +100,9 @@ jobs:
   add-image-tags:
     needs: [prepare-input]
     name: Add Additional Tags To Image
+    permissions:
+      id-token: write
+      contents: read
     uses: ./.github/workflows/reusable-docker-add-tags.yml
     with:
       environment: uat
