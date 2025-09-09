@@ -20,10 +20,10 @@ on:
         type: boolean
         default: true
       source_ecr_name:
-        require: true
+        required: true
         type: string
       destination_ecr_name:
-        require: true
+        required: true
         type: string
     secrets:
       AWS_ROLE_TO_ASSUME:
@@ -41,6 +41,9 @@ env:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Set target branch name
