@@ -101,6 +101,15 @@ jobs:
             IMAGE_TAG="v${ $APP_VERSION }"
           fi
 
+          echo "ECR_REGISTRY=$ECR_REGISTRY"
+          echo "SOURCE_ECR_NAME=$SOURCE_ECR_NAME"
+          echo "IMAGE_SHA=$IMAGE_SHA"
+          echo "DESTINATION_ECR_NAME=$DESTINATION_ECR_NAME"
+          echo "IMAGE_TAG=$IMAGE_TAG"
+          echo "ENV_NAME=$ENV_NAME"
+          echo "docker tag $ECR_REGISTRY/$SOURCE_ECR_NAME:$IMAGE_SHA $ECR_REGISTRY/$DESTINATION_ECR_NAME:$ENV_NAME"
+          echo "docker tag $ECR_REGISTRY/$SOURCE_ECR_NAME:$IMAGE_SHA $ECR_REGISTRY/$DESTINATION_ECR_NAME:$IMAGE_TAG"
+
           echo "Verifying and re-tagging API image: $IMAGE_SHA"
           aws ecr describe-images --repository-name $SOURCE_ECR_NAME --image-ids imageTag=$IMAGE_SHA
           docker pull $ECR_REGISTRY/$SOURCE_ECR_NAME:$IMAGE_SHA
