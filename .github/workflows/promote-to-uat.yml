@@ -103,12 +103,12 @@ jobs:
     uses: ./.github/workflows/reusable-docker-add-tags.yml
     with:
       environment: uat
-      app_name: ${{ need.prepare-input.outputs.app_name }}
-      app_version: ${{ need.prepare-input.outputs.app_version  }}
-      image_sha: ${{ need.prepare-input.outputs.image_sha  }}
-      enforce_version_check: ${{ eneed.prepare-input.outputs.enforce_version_check  }}
-      source_ecr_name: ${{ need.prepare-input.outputs.source_ecr_name  }}
-      destination_ecr_name: ${{ need.prepare-input.outputs.destination_ecr_name  }}
+      app_name: ${{ needs.prepare-input.outputs.app_name }}
+      app_version: ${{ needs.prepare-input.outputs.app_version  }}
+      image_sha: ${{ needs.prepare-input.outputs.image_sha  }}
+      enforce_version_check: ${{ eneeds.prepare-input.outputs.enforce_version_check  }}
+      source_ecr_name: ${{ needs.prepare-input.outputs.source_ecr_name  }}
+      destination_ecr_name: ${{ needs.prepare-input.outputs.destination_ecr_name  }}
     secrets:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
