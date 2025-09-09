@@ -152,7 +152,7 @@ jobs:
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
           # release candidate tag
-          IMAGE_TAG="v{ $APP_VERSION }-rc"
+          IMAGE_TAG="v{$APP_VERSION}-rc"
 
           if [[ "$APP_NAME" == "api" ]]; then
             yq -i '.api.image.tag = "$IMAGE_TAG"' helm/ce10grp2-app/values-uat.yaml
@@ -166,7 +166,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: "uat"
-          branch: "promote-uat/$APP_NAME-${{ github.run_id }}"
+          branch: "promote-uat/$${{ APP_NAME }}-${{ github.run_id }}"
           title: ${{ steps.pr_details.outputs.title }}
           body: ${{ steps.pr_details.outputs.body }}
           commit-message: ${{ steps.pr_details.outputs.title }}
