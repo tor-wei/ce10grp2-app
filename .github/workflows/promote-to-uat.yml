@@ -106,7 +106,7 @@ jobs:
       app_name: ${{ needs.prepare-input.outputs.app_name }}
       app_version: ${{ needs.prepare-input.outputs.app_version  }}
       image_sha: ${{ needs.prepare-input.outputs.image_sha  }}
-      enforce_version_check: ${{ eneeds.prepare-input.outputs.enforce_version_check  }}
+      enforce_version_check: ${{ needs.prepare-input.outputs.enforce_version_check  }}
       source_ecr_name: ${{ needs.prepare-input.outputs.source_ecr_name  }}
       destination_ecr_name: ${{ needs.prepare-input.outputs.destination_ecr_name  }}
     secrets:
