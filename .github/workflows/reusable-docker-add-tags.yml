@@ -30,6 +30,11 @@ on:
         required: true
       AWS_REGION:
         required: true
+
+permissions:
+  id-token: write
+  contents: read
+
 env:
   ENV_NAME: ${{ inputs.environment }}
   APP_NAME: ${{ inputs.app_name }}
@@ -41,9 +46,6 @@ env:
 jobs:
   promote:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       - name: Set target branch name
