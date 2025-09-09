@@ -105,8 +105,8 @@ jobs:
           )
           else
             # Handles 'api' or 'frontend' selection
-            local TAG_VALUE=""
-            local COMPONENT_NAME=""
+            TAG_VALUE=""
+            COMPONENT_NAME=""
             if [[ "$COMPONENTS" == "api" ]]; then
               TAG_VALUE="$API_TAG"
               COMPONENT_NAME="API"
