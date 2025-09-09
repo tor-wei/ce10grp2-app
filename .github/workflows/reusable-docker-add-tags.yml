@@ -64,7 +64,7 @@ jobs:
           ref: ${{ env.TARGET_BRANCH }}
 
       - name: Validate Version (if enforced)
-        if: inputs.enforce_version_check == true
+        if: ${{ inputs.enforce_version_check == 'true' }}
         run: |
           VERSION_FILE="${ APP_NAME }/version.txt"
           if [ ! -f "$VERSION_FILE" ]; then

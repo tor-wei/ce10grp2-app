@@ -44,7 +44,6 @@ jobs:
       app_name: ${{ steps.required-inputs.outputs.app_name }}
       app_version: ${{ steps.required-inputs.outputs.app_version }}
       image_sha: ${{ steps.required-inputs.outputs.image_sha }}
-      enforce_version_check: ${{ steps.required-inputs.outputs.enforce_version_check }}
       source_ecr_name: ${{ steps.required-inputs.outputs.source_ecr_name }}
       destination_ecr_name: ${{ steps.required-inputs.outputs.destination_ecr_name }}
 
@@ -56,7 +55,6 @@ jobs:
             APP_NAME="${{ github.event.inputs.app_name }}"
             APP_VERSION="${{ github.event.inputs.app_version }}"
             IMAGE_SHA="${{ github.event.inputs.image_sha }}"
-            ENFORCE_VERSION_CHECK="${{ github.event.inputs.enforce_version_check }}"
           elif [ "${{ github.event_name }}" == "push" ]; then
             TAG_NAME=${GITHUB_REF#refs/tags/}
             echo "Full tag name: $TAG_NAME"
@@ -85,7 +83,6 @@ jobs:
           echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
           echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
           echo "image_sha=$IMAGE_SHA" >> $GITHUB_OUTPUT
-          echo "enforce_version_check=$ENFORCE_VERSION_CHECK" >> $GITHUB_OUTPUT
           echo "source_ecr_name=$SOURCE_ECR_NAME" >> $GITHUB_OUTPUT
           echo "destination_ecr_name=$DESTINATION_ECR_NAME" >> $GITHUB_OUTPUT
 
@@ -93,7 +90,6 @@ jobs:
           echo "APP_NAME: $APP_NAME"
           echo "APP_VERSION: $APP_VERSION"
           echo "IMAGE_SHA: $IMAGE_SHA"
-          echo "ENFORCE_VERSION_CHECK: $ENFORCE_VERSION_CHECK"
           echo "SOURCE_ECR_NAME: $SOURCE_ECR_NAME"
           echo "DESTINATION_ECR_NAME: $DESTINATION_ECR_NAME"
 
@@ -109,7 +105,7 @@ jobs:
       app_name: ${{ needs.prepare-input.outputs.app_name }}
       app_version: ${{ needs.prepare-input.outputs.app_version  }}
       image_sha: ${{ needs.prepare-input.outputs.image_sha  }}
-      enforce_version_check: ${{ needs.prepare-input.outputs.enforce_version_check  }}
+      enforce_version_check: ${{ github.event_name == 'push' && 'true' || github.event.inputs.enforce_version_check }}
       source_ecr_name: ${{ needs.prepare-input.outputs.source_ecr_name  }}
       destination_ecr_name: ${{ needs.prepare-input.outputs.destination_ecr_name  }}
     secrets:
