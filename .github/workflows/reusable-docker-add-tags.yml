@@ -1,0 +1,99 @@
+name: Add additional tags for UAT / PROD promotion
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      app_name:
+        required: true
+        type: string
+      app_version:
+        required: true
+        type: string
+      image_sha:
+        required: true
+        type: string
+      enforce_version_check:
+        required: false
+        type: boolean
+        default: true
+      source_ecr_name:
+        require: true
+        type: string
+      destination_ecr_name:
+        require: true
+        type: string
+    secrets:
+      AWS_ROLE_TO_ASSUME:
+        required: true
+      AWS_REGION:
+        required: true
+env:
+  ENV_NAME: ${{ inputs.environment }}
+  APP_NAME: ${{ inputs.app_name }}
+  APP_VERSION: ${{ inputs.app_version }}
+  IMAGE_SHA: ${{ inputs.image_sha }}
+  SOURCE_ECR_NAME: ${{ inputs.source_ecr_name }}
+  DESTINATION_ECR_NAME: ${{ inputs.destination_ecr_name }}
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Environment Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ $ENV_NAME == "uat" && "uat" || ($ENV_NAME == "prod" && "main") }}
+
+      - name: Validate Version (if enforced)
+        if: inputs.enforce_version_check == true
+        run: |
+          VERSION_FILE="${ APP_NAME }/version.txt"
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "version.txt not found at $VERSION_FILE"
+            exit 1
+          fi
+
+          ACTUAL_VERSION=$(cat $VERSION_FILE)
+          echo "Found version: $ACTUAL_VERSION"
+          echo "Requested version: $APP_VERSION"
+
+          if [[ "$ACTUAL_VERSION" != "$APP_VERSION" ]]; then
+            echo "Version mismatch!"
+            exit 1
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify & Tag Image for UAT / PROD
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          if [ "$ENV_NAME" == "uat" ]; then
+            IMAGE_TAG="v{ $APP_VERSION }-rc"
+          elif [ "$ENV_NAME" == "prod" ]; then
+            IMAGE_TAG="v${ $APP_VERSION }"
+          fi
+
+          echo "Verifying and re-tagging API image: $IMAGE_SHA"
+          aws ecr describe-images --repository-name $SOURCE_ECR_NAME --image-ids imageTag=$IMAGE_SHA
+          docker pull $ECR_REGISTRY/$SOURCE_ECR_NAME:$IMAGE_SHA
+
+          # Tag and push environment
+          docker tag $ECR_REGISTRY/$SOURCE_ECR_NAME:$IMAGE_SHA $ECR_REGISTRY/$DESTINATION_ECR_NAME:$ENV_NAME
+          docker push $ECR_REGISTRY/$DESTINATION_ECR_NAME:$ENV_NAME
+
+          # Tag and push version
+          docker tag $ECR_REGISTRY/$SOURCE_ECR_NAME:$IMAGE_SHA $ECR_REGISTRY/$DESTINATION_ECR_NAME:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$DESTINATION_ECR_NAME:$IMAGE_TAG
