@@ -43,10 +43,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set target branch name
+        id: set_branch
+        run: |
+          if [ "$ENV_NAME" == "uat" ]; then
+            TARGET_BRANCH="uat"
+          elif [ "$ENV_NAME" == "prod" ]; then
+            TARGET_BRANCH="main"
+          fi
+          echo "TARGET_BRANCH=$TARGET_BRANCH" >> $GITHUB_ENV
+
       - name: Checkout Environment Branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ $ENV_NAME == "uat" && "uat" || ($ENV_NAME == "prod" && "main") }}
+          ref: ${{ env.TARGET_BRANCH }}
 
       - name: Validate Version (if enforced)
         if: inputs.enforce_version_check == true

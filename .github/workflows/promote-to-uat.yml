@@ -32,8 +32,8 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  NON_PROD_API_ECR_NAME: ${{ var.NON_PROD_API_ECR_NAME }}
-  NON_PROD_FRONTEND_ECR_NAME: ${{ var.NON_PROD_FRONTEND_ECR_NAME }}
+  NON_PROD_API_ECR_NAME: ${{ vars.NON_PROD_API_ECR_NAME }}
+  NON_PROD_FRONTEND_ECR_NAME: ${{ vars.NON_PROD_FRONTEND_ECR_NAME }}
 
 jobs:
   promote-image-to-uat:
@@ -138,7 +138,7 @@ jobs:
 
           # release candidate tag
           IMAGE_TAG="v{ $APP_VERSION }-rc"
-          
+
           if [[ "$APP_NAME" == "api" ]]; then
             yq -i '.api.image.tag = "$IMAGE_TAG"' helm/ce10grp2-app/values-uat.yaml
           elif [[ "$APP_NAME" == "frontend" ]]; then
