@@ -163,9 +163,9 @@ jobs:
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
           if [[ "$APP_NAME" == "api" ]]; then
-            yq -i '.api.image.tag = $IMAGE_TAG' helm/ce10grp2-app/values-uat.yaml
+            yq -i '.api.image.tag = strenv(IMAGE_TAG)' helm/ce10grp2-app/values-uat.yaml
           elif [[ "$APP_NAME" == "frontend" ]]; then
-            yq -i '.frontend.image.tag = $IMAGE_TAG' helm/ce10grp2-app/values-uat.yaml
+            yq -i '.frontend.image.tag = strenv(IMAGE_TAG)' helm/ce10grp2-app/values-uat.yaml
           fi
 
       - name: Create Pull Request to UAT
