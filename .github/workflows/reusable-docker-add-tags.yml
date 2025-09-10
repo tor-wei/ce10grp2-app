@@ -18,10 +18,10 @@ on:
       image_tag:
         required: true
         type: string
-      # enforce_version_check:
-      #   required: false
-      #   type: boolean
-      #   default: true
+      enforce_version_check:
+        required: true
+        type: string
+        default: true
       source_ecr_name:
         required: true
         type: string
@@ -68,7 +68,7 @@ jobs:
           ref: ${{ env.TARGET_BRANCH }}
 
       - name: Validate Version (if enforced)
-        # if: ${{ inputs.enforce_version_check == 'true' }}
+        if: ${{ inputs.enforce_version_check == "yes" }}
         run: |
           VERSION_FILE="${APP_NAME}/version.txt"
           if [ ! -f "$VERSION_FILE" ]; then
