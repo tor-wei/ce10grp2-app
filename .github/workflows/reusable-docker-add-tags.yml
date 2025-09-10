@@ -15,6 +15,9 @@ on:
       image_sha:
         required: true
         type: string
+      image_tag:
+        required: true
+        type: string
       # enforce_version_check:
       #   required: false
       #   type: boolean
@@ -40,6 +43,7 @@ env:
   APP_NAME: ${{ inputs.app_name }}
   APP_VERSION: ${{ inputs.app_version }}
   IMAGE_SHA: ${{ inputs.image_sha }}
+  IMAGE_TAG: ${{ inputs.image_tag }}
   SOURCE_ECR_NAME: ${{ inputs.source_ecr_name }}
   DESTINATION_ECR_NAME: ${{ inputs.destination_ecr_name }}
 
@@ -95,12 +99,6 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          if [ "$ENV_NAME" == "uat" ]; then
-            IMAGE_TAG="v${APP_VERSION}-rc"
-          elif [ "$ENV_NAME" == "prod" ]; then
-            IMAGE_TAG="v${APP_VERSION}"
-          fi
-
           echo "ECR_REGISTRY=$ECR_REGISTRY"
           echo "SOURCE_ECR_NAME=$SOURCE_ECR_NAME"
           echo "IMAGE_SHA=$IMAGE_SHA"
