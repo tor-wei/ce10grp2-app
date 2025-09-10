@@ -144,7 +144,7 @@ jobs:
           BODY=$(cat <<EOF
           This PR promotes this image to the UAT environment.
 
-          - **$APP_NAME Version:** \`$IMAGE_SHA\`
+          - **$APP_NAME Version:** \`$IMAGE_SHA\` -> \`$IMAGE_TAG\`
 
           Please review and merge to deploy.
           EOF
@@ -162,13 +162,10 @@ jobs:
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
-          # release candidate tag
-          IMAGE_TAG="v${APP_VERSION}-rc"
-
           if [[ "$APP_NAME" == "api" ]]; then
-            yq -i '.api.image.tag = "$IMAGE_TAG"' helm/ce10grp2-app/values-uat.yaml
+            yq -i '.api.image.tag = $IMAGE_TAG' helm/ce10grp2-app/values-uat.yaml
           elif [[ "$APP_NAME" == "frontend" ]]; then
-            yq -i '.frontend.image.tag = "$IMAGE_TAG"' helm/ce10grp2-app/values-uat.yaml
+            yq -i '.frontend.image.tag = $IMAGE_TAG' helm/ce10grp2-app/values-uat.yaml
           fi
 
       - name: Create Pull Request to UAT
