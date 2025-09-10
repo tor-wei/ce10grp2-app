@@ -21,7 +21,6 @@ on:
       enforce_version_check:
         required: true
         type: string
-        default: true
       source_ecr_name:
         required: true
         type: string
@@ -61,6 +60,7 @@ jobs:
             TARGET_BRANCH="main"
           fi
           echo "TARGET_BRANCH=$TARGET_BRANCH" >> $GITHUB_ENV
+          echo "inputs.enforce_version_check is ${{ inputs.enforce_version_check }}"
 
       - name: Checkout Environment Branch
         uses: actions/checkout@v4
