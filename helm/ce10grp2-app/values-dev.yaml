@@ -13,10 +13,9 @@ frontend:
   replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/frontend"
-    tag: 6dd35e5
+    tag: 45c680a
   env:
     REACT_APP_API_URL: "http://dev.lingo.ce10grp2.sctp-sandbox.com/api"
-
     # ADD THIS: This variable is for Nginx (server-side proxy)
     BACKEND_API_URL: "ce10grp2-dev-ce10grp2-app-api:3000"
   service:
