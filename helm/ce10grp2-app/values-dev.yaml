@@ -2,7 +2,7 @@ api:
   replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/api"
-    tag: "d93fd5a"
+    tag: "6dd35e5"
   env:
     NODE_ENV: development
     DEBUG: "true"
