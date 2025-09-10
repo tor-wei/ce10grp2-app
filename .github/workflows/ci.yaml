@@ -4,7 +4,7 @@ name: CI Checks for API and Frontend
 
 on:
   pull_request:
-    branches: [dev]
+    branches: [dev, uat, main]
 
 jobs:
   # Job 1: Run checks for the Node.js API
