@@ -21,12 +21,9 @@ on:
         type: string
       enforce_version_check:
         description: "Ensure app version and version.txt must match"
-        type: choice
-        options:
-          - yes
-          - no
+        type: boolean
         required: true
-        default: "yes"
+        default: true
 
   # Trigger the workflow automatically via a Git tag
   push:
@@ -75,7 +72,7 @@ jobs:
             APP_VERSION=$(echo "$VERSION_PART" | sed 's/^v//' | sed 's/-rc$//')
             
             IMAGE_SHA="${{ github.sha }}"
-            ENFORCE_VERSION_CHECK="yes"
+            ENFORCE_VERSION_CHECK=true
           fi
 
           IMAGE_TAG="v${APP_VERSION}-rc"
