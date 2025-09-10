@@ -165,13 +165,12 @@ jobs:
             yq -i '.frontend.image.tag = "$IMAGE_TAG"' helm/ce10grp2-app/values-uat.yaml
           fi
 
-
       - name: Create Pull Request to UAT
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: "uat"
-          branch: "promote-uat/${{ APP_NAME }}-${{ github.run_id }}"
+          branch: "promote-uat/${{ needs.prepare-input.outputs.app_name }}-${{ github.run_id }}"
           title: ${{ steps.pr_details.outputs.title }}
           body: ${{ steps.pr_details.outputs.body }}
           commit-message: ${{ steps.pr_details.outputs.title }}
