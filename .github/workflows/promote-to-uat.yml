@@ -103,8 +103,8 @@ jobs:
     with:
       environment: uat
       app_name: ${{ needs.prepare-input.outputs.app_name }}
-      app_version: ${{ needs.prepare-input.outputs.app_version  }}
-      image_sha: ${{ needs.prepare-input.outputs.image_sha  }}
+      app_version: ${{ needs.prepare-input.outputs.app_version }}
+      image_sha: ${{ needs.prepare-input.outputs.image_sha }}
       # enforce_version_check: ${{ github.event_name == 'push' && 'true' || github.event.inputs.enforce_version_check }}
       source_ecr_name: ${{ needs.prepare-input.outputs.source_ecr_name  }}
       destination_ecr_name: ${{ needs.prepare-input.outputs.destination_ecr_name  }}
@@ -119,6 +119,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+
+    env:
+      APP_NAME: ${{ needs.prepare-input.outputs.app_name }}
+      APP_VERSION: ${{ needs.prepare-input.outputs.app_version }}
+      IMAGE_SHA: ${{ needs.prepare-input.outputs.image_sha }}
 
     steps:
       - name: Checkout uat branch
@@ -152,7 +157,7 @@ jobs:
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
 
           # release candidate tag
-          IMAGE_TAG="v{$APP_VERSION}-rc"
+          IMAGE_TAG="v${APP_VERSION}-rc"
 
           if [[ "$APP_NAME" == "api" ]]; then
             yq -i '.api.image.tag = "$IMAGE_TAG"' helm/ce10grp2-app/values-uat.yaml
@@ -166,7 +171,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: "uat"
-          branch: "promote-uat/$${{ APP_NAME }}-${{ github.run_id }}"
+          branch: "promote-uat/${{ APP_NAME }}-${{ github.run_id }}"
           title: ${{ steps.pr_details.outputs.title }}
           body: ${{ steps.pr_details.outputs.body }}
           commit-message: ${{ steps.pr_details.outputs.title }}
