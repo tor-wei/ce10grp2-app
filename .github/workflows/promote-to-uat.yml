@@ -48,6 +48,7 @@ jobs:
       app_version: ${{ steps.required-inputs.outputs.app_version }}
       image_sha: ${{ steps.required-inputs.outputs.image_sha }}
       image_tag: ${{ steps.required-inputs.outputs.image_tag }}
+      enforce_version_check: ${{ steps.required-inputs.outputs.enforce_version_check }}
       source_ecr_name: ${{ steps.required-inputs.outputs.source_ecr_name }}
       destination_ecr_name: ${{ steps.required-inputs.outputs.destination_ecr_name }}
 
