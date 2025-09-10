@@ -91,6 +91,7 @@ jobs:
           echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
           echo "image_sha=$IMAGE_SHA" >> $GITHUB_OUTPUT
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "enforce_version_check=$ENFORCE_VERSION_CHECK" >> $GITHUB_OUTPUT
           echo "source_ecr_name=$SOURCE_ECR_NAME" >> $GITHUB_OUTPUT
           echo "destination_ecr_name=$DESTINATION_ECR_NAME" >> $GITHUB_OUTPUT
 
@@ -98,6 +99,8 @@ jobs:
           echo "APP_NAME: $APP_NAME"
           echo "APP_VERSION: $APP_VERSION"
           echo "IMAGE_SHA: $IMAGE_SHA"
+          echo "IMAGE_TAG: $IMAGE_TAG"
+          echo "ENFORCE_VERSION_CHECK=$ENFORCE_VERSION_CHECK"
           echo "SOURCE_ECR_NAME: $SOURCE_ECR_NAME"
           echo "DESTINATION_ECR_NAME: $DESTINATION_ECR_NAME"
 
