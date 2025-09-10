@@ -1,131 +1,165 @@
-# .github/workflows/promote-to-prod.yml
-name: Promote UAT to Production
+name: Promote to PROD (SHA + Tag)
 
 on:
+  # manual trigger for promotion to PROD
   workflow_dispatch:
     inputs:
-      components:
-        description: "Which component(s) to promote from UAT to Production"
+      app_name:
+        description: "App name"
         required: true
-        default: "both"
         type: choice
         options:
-          - both
           - api
           - frontend
+      app_version:
+        description: "App version (e.g. 1.0.10)"
+        required: true
+        type: string
+      image_sha:
+        description: "Image SHA built on dev"
+        required: true
+        type: string
+      enforce_version_check:
+        description: "Ensure app version and version.txt must match"
+        type: choice
+        options:
+          - "true"
+          - "false"
+        required: true
+        default: "true"
+
+  # Trigger the workflow automatically via a Git tag
+  push:
+    tags:
+      - 'prod/**/**'  # Trigger workflow on tags like 'prod/api/v1.0.10'
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  NON_PROD_API_ECR: ${{ secrets.NON_PROD_API_ECR }}
-  NON_PROD_FRONTEND_ECR: ${{ secrets.NON_PROD_FRONTEND_ECR }}
-  PROD_API_ECR: ${{ secrets.PROD_API_ECR }}
-  PROD_FRONTEND_ECR: ${{ secrets.PROD_FRONTEND_ECR }}
+  NON_PROD_API_ECR_NAME: ${{ vars.NON_PROD_API_ECR_NAME }}
+  NON_PROD_FRONTEND_ECR_NAME: ${{ vars.NON_PROD_FRONTEND_ECR_NAME }}
+  PROD_API_ECR_NAME: ${{ vars.PROD_API_ECR_NAME }}
+  PROD_FRONTEND_ECR_NAME: ${{ vars.PROD_FRONTEND_ECR_NAME }}
 
 jobs:
-  promote:
-    name: Promote UAT to Production
+  prepare-input:
+    name: Prepare Inputs For Workflow
     runs-on: ubuntu-latest
+
+    outputs:
+      app_name: ${{ steps.required-inputs.outputs.app_name }}
+      app_version: ${{ steps.required-inputs.outputs.app_version }}
+      image_sha: ${{ steps.required-inputs.outputs.image_sha }}
+      image_tag: ${{ steps.required-inputs.outputs.image_tag }}
+      enforce_version_check: ${{ steps.required-inputs.outputs.enforce_version_check }}
+      source_ecr_name: ${{ steps.required-inputs.outputs.source_ecr_name }}
+      destination_ecr_name: ${{ steps.required-inputs.outputs.destination_ecr_name }}
+
+    steps:
+      - name: Determine Input For Promotion
+        id: required-inputs
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            APP_NAME="${{ github.event.inputs.app_name }}"
+            APP_VERSION="${{ github.event.inputs.app_version }}"
+            IMAGE_SHA="${{ github.event.inputs.image_sha }}"
+            ENFORCE_VERSION_CHECK="${{ github.event.inputs.enforce_version_check }}"
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            echo "Full tag name: $TAG_NAME"
+            
+            # Extract app name
+            APP_NAME=$(echo "$TAG_NAME" | cut -d'/' -f2)
+
+            # Extract version part (e.g., 'v1.0.10-rc')
+            VERSION_PART=$(echo "$TAG_NAME" | cut -d'/' -f3)  # 'v1.0.10-rc'
+
+            # Remove leading "v" and trailing "-rc" using sed
+            APP_VERSION=$(echo "$VERSION_PART" | sed 's/^v//' | sed 's/-rc$//')
+            
+            IMAGE_SHA="${{ github.sha }}"
+            ENFORCE_VERSION_CHECK="true"
+          fi
+
+          IMAGE_TAG="v${APP_VERSION}"
+
+          if [ "$APP_NAME" == "api" ]; then
+            SOURCE_ECR_NAME=$NON_PROD_API_ECR_NAME
+            DESTINATION_ECR_NAME=$PROD_API_ECR_NAME
+          elif [ "$APP_NAME" == "frontend" ]; then
+            SOURCE_ECR_NAME=$NON_PROD_FRONTEND_ECR_NAME
+            DESTINATION_ECR_NAME=$PROD_FRONTEND_ECR_NAME
+          fi
+
+          echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
+          echo "app_version=$APP_VERSION" >> $GITHUB_OUTPUT
+          echo "image_sha=$IMAGE_SHA" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "enforce_version_check=$ENFORCE_VERSION_CHECK" >> $GITHUB_OUTPUT
+          echo "source_ecr_name=$SOURCE_ECR_NAME" >> $GITHUB_OUTPUT
+          echo "destination_ecr_name=$DESTINATION_ECR_NAME" >> $GITHUB_OUTPUT
+
+          # Output values to the log for debugging
+          echo "APP_NAME: $APP_NAME"
+          echo "APP_VERSION: $APP_VERSION"
+          echo "IMAGE_SHA: $IMAGE_SHA"
+          echo "IMAGE_TAG: $IMAGE_TAG"
+          echo "ENFORCE_VERSION_CHECK=$ENFORCE_VERSION_CHECK"
+          echo "SOURCE_ECR_NAME: $SOURCE_ECR_NAME"
+          echo "DESTINATION_ECR_NAME: $DESTINATION_ECR_NAME"
+
+  add-image-tags:
+    needs: [prepare-input]
+    name: Add Additional Tags To Image
     permissions:
       id-token: write
+      contents: read
+    uses: ./.github/workflows/reusable-docker-add-tags.yml
+    with:
+      environment: prod
+      app_name: ${{ needs.prepare-input.outputs.app_name }}
+      app_version: ${{ needs.prepare-input.outputs.app_version }}
+      image_sha: ${{ needs.prepare-input.outputs.image_sha }}
+      image_tag: ${{ needs.prepare-input.outputs.image_tag }}
+      enforce_version_check: ${{ needs.prepare-input.outputs.enforce_version_check }}
+      source_ecr_name: ${{ needs.prepare-input.outputs.source_ecr_name  }}
+      destination_ecr_name: ${{ needs.prepare-input.outputs.destination_ecr_name  }}
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
+  create-pr:
+    needs: [prepare-input, add-image-tags]
+    name: Create PR for promotion
+    runs-on: ubuntu-latest
+    permissions:
       contents: write
       pull-requests: write
 
+    env:
+      APP_NAME: ${{ needs.prepare-input.outputs.app_name }}
+      APP_VERSION: ${{ needs.prepare-input.outputs.app_version }}
+      IMAGE_SHA: ${{ needs.prepare-input.outputs.image_sha }}
+      IMAGE_TAG: ${{ needs.prepare-input.outputs.image_tag }}
+
     steps:
-      - name: Checkout uat branch to get version
-        uses: actions/checkout@v4
-        with:
-          ref: uat
-
-      - name: Get current UAT image tags
-        id: uat_versions
-        run: |
-          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          API_TAG=$(yq '.api.image.tag' helm/ce10grp2-app/values-uat.yaml)
-          FRONTEND_TAG=$(yq '.frontend.image.tag' helm/ce10grp2-app/values-uat.yaml)
-          echo "api_tag=$API_TAG" >> $GITHUB_OUTPUT
-          echo "frontend_tag=$FRONTEND_TAG" >> $GITHUB_OUTPUT
-          echo "UAT API is version $API_TAG"
-          echo "UAT Frontend is version $FRONTEND_TAG"
-
-      - name: Checkout main branch for update
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          role-session-name: github-actions-promote-prod
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Promote API Image to Production ECR
-        if: ${{ github.event.inputs.components == 'api' || github.event.inputs.components == 'both' }}
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ steps.uat_versions.outputs.api_tag }}
-        run: |
-          echo "Promoting API image $IMAGE_TAG from Non-Prod to Prod ECR"
-          docker pull $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$NON_PROD_API_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_API_ECR:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$PROD_API_ECR:$IMAGE_TAG
-
-      - name: Promote Frontend Image to Production ECR
-        if: ${{ github.event.inputs.components == 'frontend' || github.event.inputs.components == 'both' }}
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ steps.uat_versions.outputs.frontend_tag }}
-        run: |
-          echo "Promoting Frontend image $IMAGE_TAG from Non-Prod to Prod ECR"
-          docker pull $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG
-          docker tag $ECR_REGISTRY/$NON_PROD_FRONTEND_ECR:$IMAGE_TAG $ECR_REGISTRY/$PROD_FRONTEND_ECR:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$PROD_FRONTEND_ECR:$IMAGE_TAG
-
-      - name: Set up PR details
+      - name: Setup PR Details
         id: pr_details
-        # Pass the outputs from the previous step into this script's environment
-        env:
-          COMPONENTS: ${{ github.event.inputs.components }}
-          API_TAG: ${{ steps.uat_versions.outputs.api_tag }}
-          FRONTEND_TAG: ${{ steps.uat_versions.outputs.frontend_tag }}
         run: |
-          if [[ "$COMPONENTS" == "both" ]]; then
-            TITLE="Promote API ($API_TAG) & Frontend ($FRONTEND_TAG) to Production"
-            BODY=$(cat <<EOF
-          This PR promotes the versions currently in UAT to the Production environment.
+          TITLE="Promote $APP_NAME ($IMAGE_SHA) to PROD"
+          BODY=$(cat <<EOF
+          This PR promotes this image to the PROD environment.
 
-          - **API Version:** \`$API_TAG\`
-          - **Frontend Version:** \`$FRONTEND_TAG\`
+          - **$APP_NAME Version:** \`$IMAGE_SHA\` -> \`$IMAGE_TAG\`
 
           Please review and merge to deploy.
           EOF
           )
-          else
-            # Handles 'api' or 'frontend' selection
-            local TAG_VALUE=""
-            local COMPONENT_NAME=""
-            if [[ "$COMPONENTS" == "api" ]]; then
-              TAG_VALUE="$API_TAG"
-              COMPONENT_NAME="API"
-            else
-              TAG_VALUE="$FRONTEND_TAG"
-              COMPONENT_NAME="Frontend"
-            fi
-            
-            TITLE="Promote $COMPONENT_NAME ($TAG_VALUE) to Production"
-            BODY=$(cat <<EOF
-          This PR promotes the version currently in UAT to the Production environment.
 
-          - **$COMPONENT_NAME Version:** \`$TAG_VALUE\`
-
-          Please review and merge to deploy.
-          EOF
-          )
-          fi
           # Use multiline string outputs for use in the next step
           echo "title<<EOF" >> $GITHUB_OUTPUT
           echo "$TITLE" >> $GITHUB_OUTPUT
@@ -134,24 +168,22 @@ jobs:
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # STEP 1: Modify the files in a dedicated 'run' step
-      - name: Update Helm Values for Production
+      - name: Update Helm Values for PROD
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          if [[ "${{ github.event.inputs.components }}" == "api" || "${{ github.event.inputs.components }}" == "both" ]]; then
-            yq -i '.api.image.tag = "${{ steps.uat_versions.outputs.api_tag }}"' helm/ce10grp2-app/values-prod.yaml
-          fi
-          if [[ "${{ github.event.inputs.components }}" == "frontend" || "${{ github.event.inputs.components }}" == "both" ]]; then
-            yq -i '.frontend.image.tag = "${{ steps.uat_versions.outputs.frontend_tag }}"' helm/ce10grp2-app/values-prod.yaml
+
+          if [[ "$APP_NAME" == "api" ]]; then
+            yq -i '.api.image.tag = strenv(IMAGE_TAG)' helm/ce10grp2-app/values-prod.yaml
+          elif [[ "$APP_NAME" == "frontend" ]]; then
+            yq -i '.frontend.image.tag = strenv(IMAGE_TAG)' helm/ce10grp2-app/values-prod.yaml
           fi
 
-      # STEP 2: Create the PR with the changes made in the step above
-      - name: Create Pull Request to Production
+      - name: Create Pull Request to PROD
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: "main"
-          branch: "promote-prod/${{ github.event.inputs.components }}-${{ github.run_id }}"
+          branch: "promote-prod/${{ needs.prepare-input.outputs.app_name }}-${{ github.run_id }}"
           title: ${{ steps.pr_details.outputs.title }}
           body: ${{ steps.pr_details.outputs.body }}
           commit-message: ${{ steps.pr_details.outputs.title }}
