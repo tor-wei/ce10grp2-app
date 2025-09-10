@@ -144,10 +144,10 @@ app.post("/api/score", async (req, res) => {
     console.log("Received score:", scoreData);
 
     // Store in Redis list
-    await redisClient.lpush("game_scores", JSON.stringify(scoreData));
+    await redisClient.lPush("game_scores", JSON.stringify(scoreData));
 
     // Keep only last 100 scores
-    await redisClient.ltrim("game_scores", 0, 99);
+    await redisClient.lTrim("game_scores", 0, 99);
 
     console.log("Score saved successfully");
     res.json({
