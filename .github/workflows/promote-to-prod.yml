@@ -115,7 +115,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/reusable-docker-add-tags.yml
     with:
-      environment: main
+      environment: prod
       app_name: ${{ needs.prepare-input.outputs.app_name }}
       app_version: ${{ needs.prepare-input.outputs.app_version }}
       image_sha: ${{ needs.prepare-input.outputs.image_sha }}
