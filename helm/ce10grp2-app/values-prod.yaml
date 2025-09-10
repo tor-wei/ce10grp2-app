@@ -1,5 +1,5 @@
 api:
-  replicaCount: 3
+  replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/api"
     tag: v1.0.7
@@ -9,7 +9,7 @@ api:
     REDIS_URL: "redis://redis-service:6379"
   resources:
     limits:
-      cpu: 1000m
+      cpu: 500m
       memory: 1Gi
     requests:
       cpu: 500m
@@ -17,7 +17,7 @@ api:
   service:
     name: "ce10grp2-prod-ce10grp2-app-api"
 frontend:
-  replicaCount: 5
+  replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-prod/frontend"
     tag: v1.0.4
@@ -25,11 +25,11 @@ frontend:
     REACT_APP_API_URL: "http://lingo.ce10grp2.sctp-sandbox.com/api"
   resources:
     limits:
+      cpu: null
+      memory: 1Gi
+    requests:
       cpu: 500m
       memory: 512Mi
-    requests:
-      cpu: 250m
-      memory: 256Mi
   service:
     name: "ce10grp2-prod-ce10grp2-app-frontend"
 ingress:
