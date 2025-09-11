@@ -2,7 +2,7 @@ api:
   replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/api"
-    tag: v1.0.7-rc
+    tag: v1.0.8-rc
   env:
     NODE_ENV: uat
     DEBUG: "true"
@@ -16,7 +16,6 @@ frontend:
     tag: v1.0.4-rc
   env:
     REACT_APP_API_URL: "http://uat.lingo.ce10grp2.sctp-sandbox.com/api"
-
     # ADD THIS: This variable is for Nginx (server-side proxy)
     BACKEND_API_URL: "ce10grp2-uat-ce10grp2-app-api:3000"
   service:
