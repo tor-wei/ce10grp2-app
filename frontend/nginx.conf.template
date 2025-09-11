@@ -1,0 +1,51 @@
+# frontend/nginx.conf
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Define a custom log format
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                     '$status $body_bytes_sent "$http_referer" '
+                     '"$http_user_agent" "$http_x_forwarded_for"';
+
+    # Set the access log to use the custom format and write to stdout
+    access_log /dev/stdout main;
+
+    # Enable error log (stderr)
+    error_log /dev/stderr warn;
+
+    server {
+        listen 80;
+        server_name localhost;
+        
+        # The root directory where your index.html is located
+        root /usr/share/nginx/html;
+        index index.html;
+        
+        # This line is important for Single-Page Applications (SPAs).
+        # It ensures that refreshing the browser on any page still serves your app.
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # This handles proxying API requests to the backend
+        location /api {
+            # Use a variable for the backend URL
+            proxy_pass http://$BACKEND_API_URL;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # A simple health check endpoint
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+        }
+    }
+}

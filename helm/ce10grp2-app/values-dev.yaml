@@ -2,7 +2,7 @@ api:
   replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/api"
-    tag: "d93fd5a"
+    tag: "da1e7c4"
   env:
     NODE_ENV: development
     DEBUG: "true"
@@ -13,9 +13,11 @@ frontend:
   replicaCount: 1
   image:
     repository: "255945442255.dkr.ecr.ap-southeast-1.amazonaws.com/ce10grp2-app-dev-uat/frontend"
-    tag: d93fd5a
+    tag: d626e6c
   env:
     REACT_APP_API_URL: "http://dev.lingo.ce10grp2.sctp-sandbox.com/api"
+    # ADD THIS: This variable is for Nginx (server-side proxy)
+    BACKEND_API_URL: "ce10grp2-dev-ce10grp2-app-api:3000"
   service:
     name: "ce10grp2-dev-ce10grp2-app-frontend"
 ingress:
