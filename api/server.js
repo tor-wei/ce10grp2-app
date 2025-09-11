@@ -2,41 +2,9 @@
 const express = require("express");
 const cors = require("cors");
 const redis = require("redis");
-const client = require("prom-client"); // --- Prometheus Monitoring Start ---
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-// --- Prometheus Monitoring: Create a Registry for metrics ---
-const register = new client.Registry();
-client.collectDefaultMetrics({ register });
-
-// --- Prometheus Monitoring: Define custom metrics ---
-const httpRequestDurationMicroseconds = new client.Histogram({
-  name: "http_request_duration_seconds",
-  help: "Duration of HTTP requests in seconds",
-  labelNames: ["method", "route", "code"],
-  buckets: [0.1, 0.5, 1, 1.5], // Buckets for response time from 0.1s to 1.5s
-});
-
-const gameScoresInRedis = new client.Gauge({
-  name: "game_scores_in_redis_total",
-  help: "Total number of game scores currently stored in Redis",
-  async collect() {
-    // This function is called when Prometheus scrapes the /metrics endpoint
-    if (redisClient.isReady) {
-      const count = await redisClient.lLen("game_scores");
-      this.set(count);
-    } else {
-      this.set(0);
-    }
-  },
-});
-
-// Register the custom metrics
-register.registerMetric(httpRequestDurationMicroseconds);
-register.registerMetric(gameScoresInRedis);
-// --- Prometheus Monitoring End ---
 
 // Serve static files from the 'client' directory
 app.use(express.static("client"));
@@ -50,17 +18,6 @@ const redisClient = redis.createClient({
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// --- Prometheus Monitoring Start ---
-// --- Middleware to measure request duration ---
-app.use((req, res, next) => {
-  const end = httpRequestDurationMicroseconds.startTimer();
-  res.on("finish", () => {
-    end({ route: req.path, code: res.statusCode, method: req.method });
-  });
-  next();
-});
-// --- Prometheus Monitoring End ---
 
 // 4-letter words (same as your original list)
 const words = [
@@ -98,18 +55,6 @@ const words = [
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
-
-// --- Prometheus Monitoring Start ---
-// --- Add the /metrics endpoint ---
-app.get("/metrics", async (req, res) => {
-  try {
-    res.set("Content-Type", register.contentType);
-    res.end(await register.metrics());
-  } catch (ex) {
-    res.status(500).end(ex);
-  }
-});
-// --- Prometheus Monitoring End ---
 
 // Get random word endpoint
 app.get("/api/word", (req, res) => {
