@@ -1,5 +1,4 @@
-# .github/workflows/cd-backend.yml
-name: CD - Backend (API)
+name: CI - Build Backend (API)
 
 on:
   push:
