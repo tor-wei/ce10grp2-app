@@ -1,5 +1,4 @@
-# .github/workflows/cd-frontend.yml
-name: CD - Frontend
+name: CI - Build Frontend
 
 on:
   push:
